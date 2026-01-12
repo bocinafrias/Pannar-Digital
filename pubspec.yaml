@@ -1,0 +1,50 @@
+name: pannar_digital
+description: Dashboard PANNAR Digital - Aplicación de gestión médica para Windows
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  fl_chart: ^0.65.0
+
+  # Supabase
+  supabase_flutter: ^2.5.0
+
+  # Base de datos local (offline)
+  sqflite: ^2.3.0
+  sqflite_common_ffi: 2.3.0 # Versión específica que usa sqlite3 2.x (sin hooks problemáticos)
+  path: ^1.8.3
+
+  # Estado y navegación
+  provider: ^6.1.1
+  go_router: ^13.0.0
+
+  # Generación de reportes
+  pdf: ^3.10.7
+  printing: ^5.12.0
+  excel: ^2.1.0
+  open_file: ^3.5.10
+
+  # Utilidades
+  intl: ^0.20.2
+  shared_preferences: ^2.2.2
+  connectivity_plus: ^5.0.2
+  table_calendar: ^3.0.9
+  crypto: ^3.0.3
+  path_provider: ^2.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
