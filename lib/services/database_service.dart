@@ -417,6 +417,28 @@ class DatabaseService {
         maps.length, (i) => AppointmentModel.fromJson(maps[i]));
   }
 
+  Future<List<PatientModel>> getPatientsByIds(Set<String> ids) async {
+    if (ids.isEmpty) return [];
+    final db = await database;
+    final idList = ids.toList();
+    const chunkSize = 900; // Mantener por debajo del límite de SQLite
+    final patients = <PatientModel>[];
+
+    for (var i = 0; i < idList.length; i += chunkSize) {
+      final end = (i + chunkSize) > idList.length ? idList.length : i + chunkSize;
+      final chunk = idList.sublist(i, end);
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      final maps = await db.query(
+        'patients',
+        where: 'id IN ($placeholders)',
+        whereArgs: chunk,
+      );
+      patients.addAll(maps.map((m) => PatientModel.fromJson(m)));
+    }
+
+    return patients;
+  }
+
   // Obtener datos no sincronizados
   Future<List<Map<String, dynamic>>> getUnsyncedData() async {
     final db = await database;
@@ -781,11 +803,7 @@ class DatabaseService {
 
     // Obtener pacientes únicos de las citas
     final patientIds = attendedAppointments.map((apt) => apt.patientId).toSet();
-    final patients = <PatientModel>[];
-    for (final patientId in patientIds) {
-      final patient = await getPatientById(patientId);
-      if (patient != null) patients.add(patient);
-    }
+    final patients = await getPatientsByIds(patientIds);
 
     // Estadísticas de género
     int maleCount = 0;

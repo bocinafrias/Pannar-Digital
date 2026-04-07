@@ -5,12 +5,8 @@ import 'package:flutter/services.dart' show rootBundle;
 import '../models/talk_model.dart';
 
 class ReportPdfService {
-  // Colores del membrete basados en la descripción de la imagen
-  static const PdfColor primaryRed =
-      PdfColor.fromInt(0x8B1A1A); // Rojo oscuro para textos principales
-  static const PdfColor lightBrown =
-      PdfColor.fromInt(0xD4A574); // Beige/marrón claro
-  static const PdfColor darkBrown = PdfColor.fromInt(0x8B6914); // Marrón oscuro
+  static const String letterheadAsset =
+      'assets/images/membrete_carta.png';
 
   Future<pw.Document> generateMonthlyReport({
     required DateTime startDate,
@@ -21,31 +17,14 @@ class ReportPdfService {
   }) async {
     final pdf = pw.Document();
 
-    // Cargar imágenes de logos (si existen)
-    pw.MemoryImage? logoJalpa;
-    pw.MemoryImage? logoDIF;
-    pw.MemoryImage? logoMujeresIndigenas;
+    // Cargar imagen de membrete (fondo)
+    pw.MemoryImage? letterheadImage;
 
     try {
-      final jalpaBytes = await rootBundle.load('assets/images/logo_jalpa.png');
-      logoJalpa = pw.MemoryImage(jalpaBytes.buffer.asUint8List());
+      final letterheadBytes = await rootBundle.load(letterheadAsset);
+      letterheadImage = pw.MemoryImage(letterheadBytes.buffer.asUint8List());
     } catch (e) {
-      print('No se pudo cargar logo_jalpa.png: $e');
-    }
-
-    try {
-      final difBytes = await rootBundle.load('assets/images/logo_dif.png');
-      logoDIF = pw.MemoryImage(difBytes.buffer.asUint8List());
-    } catch (e) {
-      print('No se pudo cargar logo_dif.png: $e');
-    }
-
-    try {
-      final mujeresBytes =
-          await rootBundle.load('assets/images/logo_mujeres_indigenas.png');
-      logoMujeresIndigenas = pw.MemoryImage(mujeresBytes.buffer.asUint8List());
-    } catch (e) {
-      print('No se pudo cargar logo_mujeres_indigenas.png: $e');
+      print('No se pudo cargar $letterheadAsset: $e');
     }
 
     // Obtener datos del reporte
@@ -69,178 +48,73 @@ class ReportPdfService {
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 50, vertical: 40),
+        pageTheme: pw.PageTheme(
+          pageFormat: PdfPageFormat.letter,
+          margin: pw.EdgeInsets.zero,
+          buildBackground: (context) {
+            if (letterheadImage == null) return pw.SizedBox();
+            return pw.FullPage(
+              ignoreMargins: true,
+              child: pw.Image(
+                letterheadImage,
+                fit: pw.BoxFit.cover,
+              ),
+            );
+          },
+        ),
         build: (pw.Context context) {
           return [
-            // Membrete
-            _buildLetterhead(context, logoJalpa, logoDIF, logoMujeresIndigenas),
-            pw.SizedBox(height: 20),
+            pw.Padding(
+              padding: const pw.EdgeInsets.fromLTRB(50, 140, 50, 70),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  // Encabezado del reporte
+                  _buildReportHeader(startDate, endDate),
+                  pw.SizedBox(height: 20),
 
-            // Encabezado del reporte
-            _buildReportHeader(startDate, endDate),
-            pw.SizedBox(height: 20),
+                  // Texto introductorio
+                  _buildIntroductoryText(
+                      startDate, endDate, psychologistName),
+                  pw.SizedBox(height: 30),
 
-            // Texto introductorio
-            _buildIntroductoryText(startDate, endDate, psychologistName),
-            pw.SizedBox(height: 30),
+                  // Estadísticas de género y comunidades
+                  _buildGenderAndCommunityStats(
+                    maleCount,
+                    femaleCount,
+                    uniqueCommunities,
+                  ),
+                  pw.SizedBox(height: 30),
 
-            // Estadísticas de género y comunidades
-            _buildGenderAndCommunityStats(
-              maleCount,
-              femaleCount,
-              uniqueCommunities,
+                  // Tabla de comunidades beneficiadas
+                  _buildCommunityTable(communityCounts, totalAppointments),
+                  pw.SizedBox(height: 30),
+
+                  // Tabla de pláticas
+                  if (talks.isNotEmpty) ...[
+                    _buildTalksTable(talks),
+                    pw.SizedBox(height: 30),
+                  ],
+
+                  // Sección de estadísticas y gráficos
+                  _buildStatisticsCharts(reportData, weekdayCounts),
+                  pw.SizedBox(height: 30),
+
+                  // Sección de evidencias fotográficas
+                  _buildPhotoEvidenceSection(),
+                  pw.SizedBox(height: 30),
+
+                  // Firmas
+                  _buildSignatures(psychologistName, coordinatorName),
+                ],
+              ),
             ),
-            pw.SizedBox(height: 30),
-
-            // Tabla de comunidades beneficiadas
-            _buildCommunityTable(communityCounts, totalAppointments),
-            pw.SizedBox(height: 30),
-
-            // Tabla de pláticas
-            if (talks.isNotEmpty) ...[
-              _buildTalksTable(talks),
-              pw.SizedBox(height: 30),
-            ],
-
-            // Sección de estadísticas y gráficos
-            _buildStatisticsCharts(reportData, weekdayCounts),
-            pw.SizedBox(height: 30),
-
-            // Sección de evidencias fotográficas
-            _buildPhotoEvidenceSection(),
-            pw.SizedBox(height: 30),
-
-            // Firmas
-            _buildSignatures(psychologistName, coordinatorName),
           ];
         },
       ),
     );
 
     return pdf;
-  }
-
-  pw.Widget _buildLetterhead(
-    pw.Context context,
-    pw.MemoryImage? logoJalpa,
-    pw.MemoryImage? logoDIF,
-    pw.MemoryImage? logoMujeresIndigenas,
-  ) {
-    return pw.Container(
-      decoration: pw.BoxDecoration(
-        color: PdfColors.white,
-      ),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          // Fila superior con logos
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              // Logo izquierdo - Jalpa de Méndez
-              pw.Container(
-                width: 200,
-                child: logoJalpa != null
-                    ? pw.Image(logoJalpa, height: 60)
-                    : pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Text(
-                            'Jalpa de Méndez',
-                            style: pw.TextStyle(
-                              fontSize: 16,
-                              fontWeight: pw.FontWeight.bold,
-                              color: primaryRed,
-                            ),
-                          ),
-                          pw.Text(
-                            'EL AYUNTAMIENTO CONSTITUCIONAL',
-                            style: pw.TextStyle(
-                                fontSize: 9, color: PdfColors.black),
-                          ),
-                          pw.Text(
-                            '2024 - 2027',
-                            style: pw.TextStyle(
-                                fontSize: 9, color: PdfColors.black),
-                          ),
-                          pw.Text(
-                            'Transformación, Justicia y Dignidad',
-                            style: pw.TextStyle(
-                                fontSize: 8, color: PdfColors.black),
-                          ),
-                        ],
-                      ),
-              ),
-
-              // Logo central - DIF Municipal
-              pw.Container(
-                width: 180,
-                child: logoDIF != null
-                    ? pw.Image(logoDIF, height: 60)
-                    : pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.center,
-                        children: [
-                          pw.Text(
-                            'DIF',
-                            style: pw.TextStyle(
-                              fontSize: 20,
-                              fontWeight: pw.FontWeight.bold,
-                              color: primaryRed,
-                            ),
-                          ),
-                          pw.Text(
-                            'MUNICIPAL',
-                            style: pw.TextStyle(
-                              fontSize: 11,
-                              fontWeight: pw.FontWeight.bold,
-                              color: PdfColors.black,
-                            ),
-                          ),
-                          pw.Text(
-                            'JALPA DE MÉNDEZ 2024 - 2027',
-                            style: pw.TextStyle(
-                                fontSize: 8, color: PdfColors.black),
-                          ),
-                        ],
-                      ),
-              ),
-
-              // Logo derecho - Año de las Mujeres Indígenas
-              pw.Container(
-                width: 150,
-                child: logoMujeresIndigenas != null
-                    ? pw.Image(logoMujeresIndigenas, height: 60)
-                    : pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.end,
-                        children: [
-                          pw.Text(
-                            '2025 AÑO DE LAS',
-                            style: pw.TextStyle(
-                                fontSize: 8, color: PdfColors.black),
-                          ),
-                          pw.Text(
-                            'Mujeres Indígenas',
-                            style: pw.TextStyle(
-                                fontSize: 8, color: PdfColors.black),
-                          ),
-                        ],
-                      ),
-              ),
-            ],
-          ),
-
-          pw.SizedBox(height: 40),
-
-          // Línea decorativa inferior
-          pw.Container(
-            height: 2,
-            color: lightBrown,
-          ),
-        ],
-      ),
-    );
   }
 
   pw.Widget _buildReportHeader(DateTime startDate, DateTime endDate) {
