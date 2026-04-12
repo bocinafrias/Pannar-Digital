@@ -9,6 +9,7 @@ import '../screens/patient_form_screen.dart';
 import '../screens/clinical_history_screen.dart';
 import '../screens/reports_screen.dart';
 import '../screens/user_management_screen.dart';
+import '../screens/settings_screen.dart';
 import '../models/appointment_model.dart';
 
 class AppRouter {
@@ -75,6 +76,11 @@ class AppRouter {
         path: '/users',
         name: 'users',
         builder: (context, state) => const UserManagementScreen(),
+      ),
+      GoRoute(
+        path: '/settings',
+        name: 'settings',
+        builder: (context, state) => const SettingsScreen(),
       ),
     ],
   );

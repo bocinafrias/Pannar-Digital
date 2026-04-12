@@ -88,7 +88,7 @@ class Sidebar extends StatelessWidget {
                 _NavItem(
                   icon: Icons.settings,
                   title: 'Configuración',
-                  route: '/dashboard',
+                  route: '/settings',
                 ),
               ],
             ),

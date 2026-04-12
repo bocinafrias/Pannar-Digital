@@ -75,6 +75,12 @@ class LocalAuthService {
     return prefs.getString(_pinKey) != null;
   }
 
+  // Eliminar PIN (desactiva acceso offline con PIN)
+  Future<void> removePin() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_pinKey);
+  }
+
   // Limpiar sesión local
   Future<void> clearLocalSession({bool clearPin = false}) async {
     final prefs = await SharedPreferences.getInstance();

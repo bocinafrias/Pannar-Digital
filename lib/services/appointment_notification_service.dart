@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:local_notifier/local_notifier.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import '../models/appointment_model.dart';
 import '../models/user_model.dart';
@@ -33,7 +34,11 @@ class AppointmentNotificationService {
 
   /// Inicia el servicio para el [user] que acaba de autenticarse.
   /// Lanza las notificaciones de hoy y programa una revisión horaria.
+  /// No hace nada si el usuario desactivó las notificaciones en Configuración.
   Future<void> start(UserModel user) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('notifications_enabled') ?? true)) return;
+
     _resetIfNewDay();
     await _checkAndNotify(user);
 
