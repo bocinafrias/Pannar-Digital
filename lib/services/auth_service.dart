@@ -13,18 +13,16 @@ class AuthService extends ChangeNotifier {
   final _connectivity = Connectivity();
   StreamSubscription<AuthState>? _authSubscription;
 
-  // Lista de correos que son administradores
-  // Puedes modificar esta lista según tus necesidades
-  static const List<String> _adminEmails = [
+  // Cuentas de bootstrap: solo se usan si el usuario NO existe aún en la
+  // tabla `users` de Supabase (primer login). A partir de ese momento el rol
+  // se gestiona exclusivamente desde la base de datos.
+  static const List<String> _bootstrapAdmins = [
     'emanuelfrias43@gmail.com',
     'rodriguezhernandezangelmario0@gmail.com',
-    // Agrega más correos de administradores aquí cuando los tengas
   ];
 
-  // Verificar si un correo pertenece a un administrador
-  bool _isAdminEmail(String email) {
-    return _adminEmails.contains(email.toLowerCase());
-  }
+  bool _isBootstrapAdmin(String email) =>
+      _bootstrapAdmins.contains(email.toLowerCase());
 
   // Obtener todos los usuarios (psicólogos y admin)
   Future<List<UserModel>> getUsers() async {
@@ -120,22 +118,25 @@ class AuthService extends ChangeNotifier {
       try {
         userModel = await _getOrCreateUser(user);
       } catch (e) {
-        // Si falla al obtener/crear en Supabase (por ejemplo, error de políticas RLS),
-        // crear usuario local con la información disponible
-        debugPrint(
-            'Error obteniendo usuario de Supabase, creando usuario local: $e');
-        final email = user.email ?? '';
-        final isAdmin = _isAdminEmail(email);
-        userModel = UserModel(
-          id: user.id,
-          name: user.userMetadata?['full_name'] ??
-              user.email?.split('@')[0] ??
-              'Usuario',
-          email: email,
-          role: isAdmin ? UserRole.admin : UserRole.psychologist,
-          createdAt: DateTime.now(),
-        );
-        // No lanzar excepción, continuar con el usuario local
+        debugPrint('Error obteniendo usuario de Supabase: $e');
+        // Intentar recuperar del caché local antes de crear uno nuevo
+        final cached = await _localAuth.getLocalUser();
+        if (cached != null) {
+          userModel = cached;
+        } else {
+          final email = user.email ?? '';
+          userModel = UserModel(
+            id: user.id,
+            name: user.userMetadata?['full_name'] ??
+                email.split('@')[0] ??
+                'Usuario',
+            email: email,
+            role: _isBootstrapAdmin(email)
+                ? UserRole.admin
+                : UserRole.psychologist,
+            createdAt: DateTime.now(),
+          );
+        }
       }
 
       // Guardar usuario localmente para acceso offline
@@ -211,8 +212,12 @@ class AuthService extends ChangeNotifier {
 
   // Obtener o crear usuario en la base de datos
   Future<UserModel> _getOrCreateUser(User user) async {
+    final email = user.email ?? '';
+    final displayName =
+        user.userMetadata?['full_name'] ?? email.split('@')[0] ?? 'Usuario';
+
     try {
-      // Buscar usuario existente
+      // 1. Buscar en Supabase — la tabla es la fuente de verdad del rol
       final response = await _supabase
           .from('users')
           .select()
@@ -220,47 +225,50 @@ class AuthService extends ChangeNotifier {
           .maybeSingle();
 
       if (response != null) {
+        // Usuario existente: usar el rol que tenga en la base de datos
         return UserModel.fromJson(response);
       }
 
-      // Determinar rol: si el correo está en la lista de admin, es admin
-      final email = user.email ?? '';
-      final isAdmin = _isAdminEmail(email);
+      // 2. Usuario nuevo: psicólogo por defecto.
+      //    Excepción: cuentas bootstrap que aún no han hecho su primer login.
+      final role = _isBootstrapAdmin(email) ? UserRole.admin : UserRole.psychologist;
 
-      // Crear nuevo usuario
       final newUser = UserModel(
         id: user.id,
-        name:
-            user.userMetadata?['full_name'] ?? email.split('@')[0] ?? 'Usuario',
+        name: displayName,
         email: email,
-        role: isAdmin ? UserRole.admin : UserRole.psychologist,
+        role: role,
         createdAt: DateTime.now(),
       );
 
-      // Intentar insertar en Supabase, pero si falla (p. ej. por políticas RLS),
-      // simplemente devolver el modelo local
       try {
         await _supabase.from('users').insert(newUser.toJson());
       } catch (insertError) {
-        debugPrint(
-            'Error insertando usuario en Supabase (continuando con usuario local): $insertError');
-        // Continuar sin error, el usuario local se guardará después
+        debugPrint('Error insertando usuario en Supabase: $insertError');
       }
       return newUser;
     } catch (e) {
       debugPrint('Error al obtener/crear usuario: $e');
-      // Si hay error (incluyendo recursión infinita), crear usuario local
-      final email = user.email ?? '';
-      final isAdmin = _isAdminEmail(email);
+      // Fallback: intentar recuperar el rol del caché local
+      final cached = await _localAuth.getLocalUser();
+      if (cached != null && cached.id == user.id) return cached;
+
+      // Último recurso: psicólogo por defecto (el admin puede corregirlo después)
       return UserModel(
         id: user.id,
-        name:
-            user.userMetadata?['full_name'] ?? email.split('@')[0] ?? 'Usuario',
+        name: displayName,
         email: email,
-        role: isAdmin ? UserRole.admin : UserRole.psychologist,
+        role: _isBootstrapAdmin(email) ? UserRole.admin : UserRole.psychologist,
         createdAt: DateTime.now(),
       );
     }
+  }
+
+  // Cambiar el rol de un usuario (solo administradores)
+  Future<void> updateUserRole(String userId, UserRole newRole) async {
+    await _supabase.from('users').update({
+      'role': newRole.toString().split('.').last,
+    }).eq('id', userId);
   }
 
   // Registrar nuevo usuario (solo administradores)
