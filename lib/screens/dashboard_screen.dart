@@ -10,6 +10,7 @@ import '../widgets/weekly_summary_section.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/data_notification_service.dart';
+import '../services/appointment_notification_service.dart';
 import '../models/appointment_model.dart';
 import '../models/user_model.dart';
 
@@ -36,6 +37,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final notificationService =
         Provider.of<DataNotificationService>(context, listen: false);
     notificationService.addListener(_loadDashboardData);
+    // RF-10: Lanzar notificaciones de citas del día al entrar al dashboard
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startNotifications());
   }
 
   @override
@@ -45,6 +48,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Provider.of<DataNotificationService>(context, listen: false);
     notificationService.removeListener(_loadDashboardData);
     super.dispose();
+  }
+
+  void _startNotifications() {
+    final user = context.read<AuthService>().currentUserModel;
+    if (user != null) {
+      AppointmentNotificationService().start(user);
+    }
   }
 
   Future<void> _loadDashboardData() async {

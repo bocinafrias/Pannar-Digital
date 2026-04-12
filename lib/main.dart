@@ -8,6 +8,7 @@ import 'utils/app_router.dart';
 import 'services/auth_service.dart';
 import 'services/sync_service.dart';
 import 'services/data_notification_service.dart';
+import 'services/appointment_notification_service.dart';
 import 'dart:io' show Platform;
 
 // Importar sqflite_common_ffi para Windows (desktop)
@@ -28,6 +29,9 @@ void main() async {
 
   // Inicializar datos de fecha para el locale español
   await initializeDateFormatting('es', null);
+
+  // Inicializar notificaciones nativas de Windows (RF-10)
+  await AppointmentNotificationService.initialize();
 
   // Credenciales de Supabase configuradas
   await SupabaseConfig.initialize(

@@ -31,6 +31,9 @@ dependencies:
   excel: ^2.1.0
   open_file: ^3.5.10
 
+  # Notificaciones del sistema (Windows desktop)
+  local_notifier: ^0.1.6
+
   # Utilidades
   intl: ^0.20.2
   shared_preferences: ^2.2.2
