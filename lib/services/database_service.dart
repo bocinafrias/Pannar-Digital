@@ -3,6 +3,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/appointment_model.dart';
 import '../models/patient_model.dart';
+import '../models/report_model.dart';
 import '../models/talk_model.dart';
 import 'data_notification_service.dart';
 
@@ -25,7 +26,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'pannar_digital.db');
     final db = await openDatabase(
       path,
-      version: 4, // Aumentada para incluir psychologist_id en pacientes
+      version: 5, // v5: soft-deletes + tabla reports
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -36,30 +37,53 @@ class DatabaseService {
     return db;
   }
 
-  /// Verifica que todas las columnas necesarias existan en las tablas
+  /// Verifica que todas las columnas necesarias existan (safety net post-migración).
   Future<void> _ensureColumnsExist(Database db) async {
-    try {
-      // Verificar columna psychologist_id en patients
-      final patientsColumns = await db.rawQuery('PRAGMA table_info(patients)');
-      final hasPsychologistId =
-          patientsColumns.any((col) => col['name'] == 'psychologist_id');
+    // Columnas requeridas por tabla
+    final requiredColumns = {
+      'patients': ['psychologist_id', 'deleted_at'],
+      'appointments': ['attended', 'deleted_at'],
+      'talks': ['deleted_at'],
+    };
 
-      if (!hasPsychologistId) {
-        print('Agregando columna psychologist_id a tabla patients...');
-        await db
-            .execute('ALTER TABLE patients ADD COLUMN psychologist_id TEXT');
-        await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_patients_psychologist ON patients(psychologist_id)');
-        print('Columna psychologist_id agregada exitosamente');
+    for (final entry in requiredColumns.entries) {
+      final table = entry.key;
+      final columns = entry.value;
+      try {
+        final info = await db.rawQuery('PRAGMA table_info($table)');
+        final existing = info.map((c) => c['name'] as String).toSet();
+        for (final col in columns) {
+          if (!existing.contains(col)) {
+            await db.execute('ALTER TABLE $table ADD COLUMN $col TEXT');
+            print('_ensureColumnsExist: $col añadido a $table');
+          }
+        }
+      } catch (e) {
+        print('_ensureColumnsExist error en $table: $e');
       }
+    }
+
+    // Crear tabla reports si no existe
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS reports (
+          id TEXT PRIMARY KEY,
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          psychologist_id TEXT,
+          start_date TEXT,
+          end_date TEXT,
+          file_path TEXT,
+          created_at TEXT NOT NULL
+        )
+      ''');
     } catch (e) {
-      print('Error verificando/agregando columnas: $e');
-      // No lanzar excepción, continuar con la aplicación
+      print('_ensureColumnsExist: error creando tabla reports: $e');
     }
   }
 
   Future<void> _onCreate(Database db, int version) async {
-    // Tabla de pacientes (incluye psychologist_id desde el inicio)
+    // Tabla de pacientes
     await db.execute('''
       CREATE TABLE patients (
         id TEXT PRIMARY KEY,
@@ -74,6 +98,7 @@ class DatabaseService {
         psychologist_id TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT,
+        deleted_at TEXT,
         synced INTEGER DEFAULT 0
       )
     ''');
@@ -91,6 +116,7 @@ class DatabaseService {
         attended INTEGER,
         created_at TEXT NOT NULL,
         updated_at TEXT,
+        deleted_at TEXT,
         synced INTEGER DEFAULT 0,
         FOREIGN KEY (patient_id) REFERENCES patients (id)
       )
@@ -109,7 +135,22 @@ class DatabaseService {
         psychologist_id TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT,
+        deleted_at TEXT,
         synced INTEGER DEFAULT 0
+      )
+    ''');
+
+    // Tabla de reportes generados
+    await db.execute('''
+      CREATE TABLE reports (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        psychologist_id TEXT,
+        start_date TEXT,
+        end_date TEXT,
+        file_path TEXT,
+        created_at TEXT NOT NULL
       )
     ''');
 
@@ -161,33 +202,52 @@ class DatabaseService {
       }
     }
     if (oldVersion < 4) {
-      // Agregar columna psychologist_id a pacientes para rastrear quién los creó
       try {
-        // Verificar si la columna ya existe antes de agregarla
         final tableInfo = await db.rawQuery('PRAGMA table_info(patients)');
         final hasColumn =
             tableInfo.any((col) => col['name'] == 'psychologist_id');
-
         if (!hasColumn) {
           await db.execute(
-            'ALTER TABLE patients ADD COLUMN psychologist_id TEXT',
-          );
+              'ALTER TABLE patients ADD COLUMN psychologist_id TEXT');
           await db.execute(
               'CREATE INDEX IF NOT EXISTS idx_patients_psychologist ON patients(psychologist_id)');
-          print('Columna psychologist_id agregada en migración');
-        } else {
-          print('Columna psychologist_id ya existe');
         }
       } catch (e) {
-        // La columna ya existe o hay otro error, intentar agregar de todas formas
-        print('Error en migración psychologist_id: $e');
+        print('Error en migración v4 psychologist_id: $e');
+      }
+    }
+
+    if (oldVersion < 5) {
+      // Agregar columna deleted_at (soft-delete) a las tres tablas
+      for (final table in ['patients', 'appointments', 'talks']) {
         try {
-          await db.execute(
-            'ALTER TABLE patients ADD COLUMN psychologist_id TEXT',
-          );
-        } catch (e2) {
-          print('No se pudo agregar columna psychologist_id: $e2');
+          final info = await db.rawQuery('PRAGMA table_info($table)');
+          if (!info.any((col) => col['name'] == 'deleted_at')) {
+            await db.execute(
+                'ALTER TABLE $table ADD COLUMN deleted_at TEXT');
+            print('Columna deleted_at agregada a $table');
+          }
+        } catch (e) {
+          print('Error agregando deleted_at a $table: $e');
         }
+      }
+      // Crear tabla de reportes si no existe
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS reports (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            psychologist_id TEXT,
+            start_date TEXT,
+            end_date TEXT,
+            file_path TEXT,
+            created_at TEXT NOT NULL
+          )
+        ''');
+        print('Tabla reports creada en migración v5');
+      } catch (e) {
+        print('Error creando tabla reports: $e');
       }
     }
   }
@@ -264,6 +324,7 @@ class DatabaseService {
         whereArgs.add('%$searchQuery%');
       }
 
+      where += ' AND deleted_at IS NULL';
       maps = await db.query(
         'patients',
         where: where,
@@ -275,12 +336,16 @@ class DatabaseService {
       if (searchQuery != null && searchQuery.isNotEmpty) {
         maps = await db.query(
           'patients',
-          where: 'name LIKE ?',
+          where: 'name LIKE ? AND deleted_at IS NULL',
           whereArgs: ['%$searchQuery%'],
           orderBy: 'name ASC',
         );
       } else {
-        maps = await db.query('patients', orderBy: 'name ASC');
+        maps = await db.query(
+          'patients',
+          where: 'deleted_at IS NULL',
+          orderBy: 'name ASC',
+        );
       }
     }
 
@@ -291,7 +356,7 @@ class DatabaseService {
     final db = await database;
     final maps = await db.query(
       'patients',
-      where: 'id = ?',
+      where: 'id = ? AND deleted_at IS NULL',
       whereArgs: [id],
     );
     if (maps.isEmpty) return null;
@@ -300,13 +365,22 @@ class DatabaseService {
 
   Future<void> deletePatient(String id) async {
     final db = await database;
-    // Usar transacción para garantizar consistencia
+    final now = DateTime.now().toIso8601String();
     await db.transaction((txn) async {
-      // Primero eliminar las citas asociadas al paciente
-      await txn
-          .delete('appointments', where: 'patient_id = ?', whereArgs: [id]);
-      // Luego eliminar el paciente
-      await txn.delete('patients', where: 'id = ?', whereArgs: [id]);
+      // Soft-delete las citas asociadas
+      await txn.update(
+        'appointments',
+        {'deleted_at': now, 'synced': 0, 'updated_at': now},
+        where: 'patient_id = ? AND deleted_at IS NULL',
+        whereArgs: [id],
+      );
+      // Soft-delete el paciente
+      await txn.update(
+        'patients',
+        {'deleted_at': now, 'synced': 0, 'updated_at': now},
+        where: 'id = ? AND deleted_at IS NULL',
+        whereArgs: [id],
+      );
     });
     _notificationService.notifyPatientChanged();
   }
@@ -361,12 +435,14 @@ class DatabaseService {
     return AppointmentModel.fromJson(maps.first);
   }
 
-  // Eliminar una cita
+  // Eliminar una cita (soft-delete)
   Future<void> deleteAppointment(String id) async {
     final db = await database;
-    await db.delete(
+    final now = DateTime.now().toIso8601String();
+    await db.update(
       'appointments',
-      where: 'id = ?',
+      {'deleted_at': now, 'synced': 0, 'updated_at': now},
+      where: 'id = ? AND deleted_at IS NULL',
       whereArgs: [id],
     );
     _notificationService.notifyAppointmentChanged();
@@ -379,7 +455,7 @@ class DatabaseService {
     DateTime? endDate,
   }) async {
     final db = await database;
-    String where = '1=1';
+    String where = 'deleted_at IS NULL';
     List<dynamic> whereArgs = [];
 
     if (psychologistId != null || psychologistName != null) {
@@ -513,15 +589,62 @@ class DatabaseService {
 
   Future<int> getReportsCount() async {
     final db = await database;
-    // Si existe tabla de reportes, contar desde ahí
-    // Por ahora retornamos 0 si no hay tabla
     try {
       final result = await db.rawQuery('SELECT COUNT(*) as count FROM reports');
       return Sqflite.firstIntValue(result) ?? 0;
     } catch (e) {
-      // Tabla no existe todavía
       return 0;
     }
+  }
+
+  /// Registra un reporte generado en la tabla local.
+  Future<void> insertReport(ReportModel report) async {
+    final db = await database;
+    await db.insert(
+      'reports',
+      {
+        'id': report.id,
+        'type': report.type.toString().split('.').last,
+        'title': report.title,
+        'psychologist_id': report.psychologistId,
+        'start_date': report.startDate?.toIso8601String(),
+        'end_date': report.endDate?.toIso8601String(),
+        'file_path': report.filePath,
+        'created_at': report.createdAt.toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Retorna registros eliminados localmente que aún no se borraron en Supabase.
+  Future<List<Map<String, dynamic>>> getDeletedUnsyncedData() async {
+    final db = await database;
+    final patients = await db.query(
+      'patients',
+      columns: ['id'],
+      where: 'deleted_at IS NOT NULL AND synced = 0',
+    );
+    final appointments = await db.query(
+      'appointments',
+      columns: ['id'],
+      where: 'deleted_at IS NOT NULL AND synced = 0',
+    );
+    final talks = await db.query(
+      'talks',
+      columns: ['id'],
+      where: 'deleted_at IS NOT NULL AND synced = 0',
+    );
+    return [
+      {'table': 'patients', 'data': patients},
+      {'table': 'appointments', 'data': appointments},
+      {'table': 'talks', 'data': talks},
+    ];
+  }
+
+  /// Elimina físicamente un registro (solo llamar después de confirmar el borrado en Supabase).
+  Future<void> hardDelete(String table, String id) async {
+    final db = await database;
+    await db.delete(table, where: 'id = ?', whereArgs: [id]);
   }
 
   Future<Map<String, int>> getAppointmentStatusCounts({
@@ -756,7 +879,7 @@ class DatabaseService {
     String? psychologistId,
   }) async {
     final db = await database;
-    String where = '1=1';
+    String where = 'deleted_at IS NULL';
     List<dynamic> whereArgs = [];
 
     if (startDate != null) {
@@ -795,10 +918,17 @@ class DatabaseService {
     return TalkModel.fromJson(maps.first);
   }
 
+  // Eliminar una plática (soft-delete)
   Future<void> deleteTalk(String id) async {
     final db = await database;
-    await db.delete('talks', where: 'id = ?', whereArgs: [id]);
-    _notificationService.notifyAppointmentChanged();
+    final now = DateTime.now().toIso8601String();
+    await db.update(
+      'talks',
+      {'deleted_at': now, 'synced': 0, 'updated_at': now},
+      where: 'id = ? AND deleted_at IS NULL',
+      whereArgs: [id],
+    );
+    _notificationService.notifyPatientChanged();
   }
 
   // Métodos para reportes mensuales

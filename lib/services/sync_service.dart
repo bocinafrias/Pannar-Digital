@@ -73,10 +73,33 @@ class SyncService {
         }
       }
 
+      // Propagar eliminaciones locales a Supabase
+      await _syncDeletions();
+
       // Descargar datos actualizados de Supabase
       await _downloadFromSupabase();
     } catch (e) {
       throw Exception('Error en sincronización: $e');
+    }
+  }
+
+  /// Borra en Supabase los registros eliminados localmente y luego los elimina físicamente.
+  Future<void> _syncDeletions() async {
+    final deletedData = await _db.getDeletedUnsyncedData();
+    for (final entry in deletedData) {
+      final table = entry['table'] as String;
+      final records = entry['data'] as List;
+      for (final record in records) {
+        final id = record['id'] as String;
+        try {
+          await _supabase.from(table).delete().eq('id', id);
+          // Confirmado en Supabase: eliminación física local
+          await _db.hardDelete(table, id);
+        } catch (e) {
+          print('Error eliminando $table/$id en Supabase: $e');
+          // Se reintentará en el próximo sync (synced=0 permanece)
+        }
+      }
     }
   }
 

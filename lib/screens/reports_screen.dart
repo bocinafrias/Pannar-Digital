@@ -10,6 +10,7 @@ import '../services/database_service.dart';
 import '../services/report_pdf_service.dart';
 import '../services/data_notification_service.dart';
 import '../models/talk_model.dart';
+import '../models/report_model.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -145,6 +146,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
       await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async => pdf.save(),
       );
+
+      // Registrar el reporte generado en la base de datos local
+      final authService = context.read<AuthService>();
+      await _db.insertReport(ReportModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: ReportType.monthly,
+        title:
+            'Reporte mensual — ${DateFormat('MMMM yyyy', 'es').format(_startDate!)}',
+        startDate: _startDate,
+        endDate: _endDate,
+        psychologistId: authService.currentUserModel?.id,
+        createdAt: DateTime.now(),
+      ));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
