@@ -1,7 +1,9 @@
+import 'dart:convert';
 import '../config/supabase_config.dart';
 import '../services/database_service.dart';
 import '../models/patient_model.dart';
 import '../models/appointment_model.dart';
+import '../models/talk_model.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 class SyncService {
@@ -26,8 +28,18 @@ class SyncService {
           .firstWhere((e) => e['table'] == 'patients')['data'] as List;
       for (var patientData in unsyncedPatients) {
         try {
-          await _supabase.from('patients').upsert(patientData);
-          await _db.markAsSynced('patients', patientData['id']);
+          // Supabase no usa el campo 'synced'; se excluye antes de subir
+          final uploadData = Map<String, dynamic>.from(patientData as Map);
+          uploadData.remove('synced');
+          // clinical_data: si está como string JSON, decodificar para Supabase
+          if (uploadData['clinical_data'] is String) {
+            try {
+              uploadData['clinical_data'] =
+                  jsonDecode(uploadData['clinical_data'] as String);
+            } catch (_) {}
+          }
+          await _supabase.from('patients').upsert(uploadData);
+          await _db.markAsSynced('patients', patientData['id'] as String);
         } catch (e) {
           print('Error sincronizando paciente ${patientData['id']}: $e');
         }
@@ -38,10 +50,26 @@ class SyncService {
           .firstWhere((e) => e['table'] == 'appointments')['data'] as List;
       for (var appointmentData in unsyncedAppointments) {
         try {
-          await _supabase.from('appointments').upsert(appointmentData);
-          await _db.markAsSynced('appointments', appointmentData['id']);
+          final uploadData = Map<String, dynamic>.from(appointmentData as Map);
+          uploadData.remove('synced');
+          await _supabase.from('appointments').upsert(uploadData);
+          await _db.markAsSynced('appointments', appointmentData['id'] as String);
         } catch (e) {
           print('Error sincronizando cita ${appointmentData['id']}: $e');
+        }
+      }
+
+      // Sincronizar pláticas
+      final unsyncedTalks = unsyncedData
+          .firstWhere((e) => e['table'] == 'talks')['data'] as List;
+      for (var talkData in unsyncedTalks) {
+        try {
+          final uploadData = Map<String, dynamic>.from(talkData as Map);
+          uploadData.remove('synced');
+          await _supabase.from('talks').upsert(uploadData);
+          await _db.markAsSynced('talks', talkData['id'] as String);
+        } catch (e) {
+          print('Error sincronizando plática ${talkData['id']}: $e');
         }
       }
 
@@ -56,10 +84,11 @@ class SyncService {
   Future<void> _downloadFromSupabase() async {
     try {
       // Descargar pacientes
+      // synced:true evita que los registros descargados queden como no-sincronizados
       final patientsResponse = await _supabase.from('patients').select();
       for (var patientData in patientsResponse) {
         final patient = PatientModel.fromJson(patientData);
-        await _db.insertPatient(patient);
+        await _db.insertPatient(patient, synced: true);
       }
 
       // Descargar citas
@@ -67,7 +96,19 @@ class SyncService {
           await _supabase.from('appointments').select();
       for (var appointmentData in appointmentsResponse) {
         final appointment = AppointmentModel.fromJson(appointmentData);
-        await _db.insertAppointment(appointment);
+        await _db.insertAppointment(appointment, synced: true);
+      }
+
+      // Descargar pláticas
+      try {
+        final talksResponse = await _supabase.from('talks').select();
+        for (var talkData in talksResponse) {
+          final talk = TalkModel.fromJson(talkData);
+          await _db.insertTalk(talk, synced: true);
+        }
+      } catch (e) {
+        // La tabla talks puede no existir aún en Supabase
+        print('Aviso: no se pudieron descargar pláticas de Supabase: $e');
       }
     } catch (e) {
       throw Exception('Error descargando datos: $e');

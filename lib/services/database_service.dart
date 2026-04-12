@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/appointment_model.dart';
@@ -192,11 +193,18 @@ class DatabaseService {
   }
 
   // Métodos para pacientes
-  Future<void> insertPatient(PatientModel patient) async {
+  /// [synced]: pasar true cuando el registro ya viene de Supabase (descarga).
+  Future<void> insertPatient(PatientModel patient, {bool synced = false}) async {
     final db = await database;
+    final data = patient.toJson();
+    // clinical_data debe guardarse como JSON string en SQLite
+    if (data['clinical_data'] is Map) {
+      data['clinical_data'] = jsonEncode(data['clinical_data']);
+    }
+    data['synced'] = synced ? 1 : 0;
     await db.insert(
       'patients',
-      patient.toJson(),
+      data,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
     _notificationService.notifyPatientChanged();
@@ -304,11 +312,15 @@ class DatabaseService {
   }
 
   // Métodos para citas
-  Future<void> insertAppointment(AppointmentModel appointment) async {
+  /// [synced]: pasar true cuando el registro ya viene de Supabase (descarga).
+  Future<void> insertAppointment(AppointmentModel appointment,
+      {bool synced = false}) async {
     final db = await database;
+    final data = appointment.toJson();
+    data['synced'] = synced ? 1 : 0;
     await db.insert(
       'appointments',
-      appointment.toJson(),
+      data,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
     _notificationService.notifyAppointmentChanged();
@@ -329,6 +341,7 @@ class DatabaseService {
         'attended': attended ? 1 : 0,
         'status': newStatus,
         'updated_at': DateTime.now().toIso8601String(),
+        'synced': 0, // Marcar como no sincronizado para que se suba en el próximo sync
       },
       where: 'id = ?',
       whereArgs: [appointmentId],
@@ -444,10 +457,12 @@ class DatabaseService {
     final db = await database;
     final patients = await db.query('patients', where: 'synced = 0');
     final appointments = await db.query('appointments', where: 'synced = 0');
+    final talks = await db.query('talks', where: 'synced = 0');
 
     return [
       {'table': 'patients', 'data': patients},
       {'table': 'appointments', 'data': appointments},
+      {'table': 'talks', 'data': talks},
     ];
   }
 
@@ -722,14 +737,17 @@ class DatabaseService {
   }
 
   // Métodos para pláticas
-  Future<void> insertTalk(TalkModel talk) async {
+  /// [synced]: pasar true cuando el registro ya viene de Supabase (descarga).
+  Future<void> insertTalk(TalkModel talk, {bool synced = false}) async {
     final db = await database;
+    final data = talk.toJson();
+    data['synced'] = synced ? 1 : 0;
     await db.insert(
       'talks',
-      talk.toJson(),
+      data,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    _notificationService.notifyAppointmentChanged();
+    _notificationService.notifyPatientChanged();
   }
 
   Future<List<TalkModel>> getTalks({

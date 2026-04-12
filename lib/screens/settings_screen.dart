@@ -217,8 +217,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final authService = context.watch<AuthService>();
     final user = authService.currentUserModel;
     final userName = user?.name ?? 'Usuario';
-    final isAdmin = user?.role == UserRole.admin;
-
     return Scaffold(
       body: Row(
         children: [
@@ -267,11 +265,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 _buildNotificationsSection(),
                                 const SizedBox(height: 20),
                                 _buildSyncSection(),
-                                if (isAdmin) ...[
-                                  const SizedBox(height: 20),
-                                  _buildAdminSection(),
-                                ],
-                                const SizedBox(height: 20),
+                                                const SizedBox(height: 20),
                                 _buildAboutSection(),
                                 const SizedBox(height: 20),
                                 _buildSessionSection(),
@@ -555,27 +549,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // Administración (solo admin)
-  Widget _buildAdminSection() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionLabel('Administración'),
-          _card([
-            ListTile(
-              leading: const Icon(
-                Icons.manage_accounts_outlined,
-                color: Color(0xFF1E3A5F),
-              ),
-              title: const Text('Gestión de usuarios'),
-              subtitle:
-                  const Text('Administra psicólogos y roles del sistema'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.go('/users'),
-            ),
-          ]),
-        ],
-      );
-
   // Acerca de
   Widget _buildAboutSection() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -598,15 +571,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: const Text('Institución'),
               subtitle:
                   const Text('DIF Jalpa de Méndez — Área PANNAR'),
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.code_outlined,
-                color: Color(0xFF1E3A5F),
-              ),
-              title: const Text('Desarrollado por'),
-              subtitle:
-                  const Text('Proyecto de seminario de titulación'),
             ),
           ]),
         ],

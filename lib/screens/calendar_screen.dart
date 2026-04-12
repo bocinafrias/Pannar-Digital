@@ -25,6 +25,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
   CalendarFormat _calendarFormat = CalendarFormat.month;
   String? _selectedPsychologistId;
   List<AppointmentModel> _appointments = [];
+  List<UserModel> _psychologists = [];
+  Map<String, String> _psychologistNames = {}; // id → nombre
 
   @override
   void initState() {
@@ -33,6 +35,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     initializeDateFormatting('es', null).then((_) {
       setState(() {}); // Reconstruir después de cargar locale
     });
+    _loadPsychologists();
     _loadAppointments();
     // Escuchar cambios en los datos
     final notificationService =
@@ -47,6 +50,34 @@ class _CalendarScreenState extends State<CalendarScreen> {
         Provider.of<DataNotificationService>(context, listen: false);
     notificationService.removeListener(_loadAppointments);
     super.dispose();
+  }
+
+  /// Carga la lista de psicólogos (solo relevante para el admin).
+  Future<void> _loadPsychologists() async {
+    final authService = context.read<AuthService>();
+    final currentUser = authService.currentUserModel;
+    if (currentUser == null || currentUser.role != UserRole.admin) return;
+
+    final users = await authService.getUsers();
+    final psychologists =
+        users.where((u) => u.role == UserRole.psychologist).toList();
+    final nameMap = {for (final u in users) u.id: u.name};
+
+    if (!mounted) return;
+    setState(() {
+      _psychologists = psychologists;
+      _psychologistNames = nameMap;
+    });
+  }
+
+  /// Resuelve el campo psychologistId a un nombre legible.
+  /// El campo puede contener un UUID real o un nombre directo (datos legacy).
+  String _getPsychologistName(String psychologistId) {
+    if (_psychologistNames.containsKey(psychologistId)) {
+      return _psychologistNames[psychologistId]!;
+    }
+    // Si no está en el mapa, el campo ya es un nombre (dato legacy)
+    return psychologistId;
   }
 
   Future<void> _loadAppointments() async {
@@ -91,7 +122,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     final authService = context.watch<AuthService>();
-    final userName = authService.currentUserModel?.name ?? 'Usuario';
+    final currentUser = authService.currentUserModel;
+    final userName = currentUser?.name ?? 'Usuario';
+    final isAdmin = currentUser?.role == UserRole.admin;
 
     return Scaffold(
       body: Row(
@@ -112,10 +145,46 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
                         children: [
-                          // Botón personalizado para cambiar formato
+                          // Fila superior: filtro (admin) + botones de formato
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
                             children: [
+                              // Dropdown filtro por psicólogo (solo admin)
+                              if (isAdmin) ...[
+                                const Icon(
+                                  Icons.person_search_outlined,
+                                  size: 20,
+                                  color: Color(0xFF1E3A5F),
+                                ),
+                                const SizedBox(width: 8),
+                                DropdownButton<String?>(
+                                  value: _selectedPsychologistId,
+                                  hint: const Text('Todos los psicólogos'),
+                                  underline: Container(
+                                    height: 2,
+                                    color: const Color(0xFF1E3A5F),
+                                  ),
+                                  items: [
+                                    const DropdownMenuItem<String?>(
+                                      value: null,
+                                      child: Text('Todos los psicólogos'),
+                                    ),
+                                    ..._psychologists.map(
+                                      (p) => DropdownMenuItem<String?>(
+                                        value: p.id,
+                                        child: Text(p.name),
+                                      ),
+                                    ),
+                                  ],
+                                  onChanged: (value) {
+                                    setState(
+                                        () => _selectedPsychologistId = value);
+                                    _loadAppointments();
+                                  },
+                                ),
+                                const Spacer(),
+                              ] else
+                                const Spacer(),
+                              // Botones de formato de vista
                               _buildFormatButton(
                                 'Mes',
                                 CalendarFormat.month,
@@ -194,7 +263,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           ),
                           const Divider(),
                           Expanded(
-                            child: _buildAppointmentsList(),
+                            child: _buildAppointmentsList(isAdmin: isAdmin),
                           ),
                         ],
                       ),
@@ -215,7 +284,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Widget _buildAppointmentsList() {
+  Widget _buildAppointmentsList({bool isAdmin = false}) {
     final dayAppointments = _getAppointmentsForDay(_selectedDay);
 
     if (dayAppointments.isEmpty) {
@@ -229,6 +298,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
       itemBuilder: (context, index) {
         final appointment = dayAppointments[index];
         final isPast = appointment.dateTime.isBefore(DateTime.now());
+        final psychologistName =
+            _getPsychologistName(appointment.psychologistId);
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
           child: ListTile(
@@ -246,6 +317,25 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 Text(
                   '${appointment.dateTime.hour.toString().padLeft(2, '0')}:${appointment.dateTime.minute.toString().padLeft(2, '0')}',
                 ),
+                if (isAdmin)
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.person_outline,
+                        size: 13,
+                        color: Color(0xFF1E3A5F),
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        psychologistName,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF1E3A5F),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
                 if (isPast || appointment.status == AppointmentStatus.completed)
                   Row(
                     children: [
@@ -419,7 +509,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 _DetailRow(
                   icon: Icons.person_outline,
                   label: 'Psicólogo responsable:',
-                  value: appointment.psychologistId,
+                  value: _getPsychologistName(appointment.psychologistId),
                 ),
               ],
               const SizedBox(height: 12),

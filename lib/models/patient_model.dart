@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class PatientModel {
   final String id;
   final String name;
@@ -39,7 +41,12 @@ class PatientModel {
       gender: json['gender'] as String?,
       address: json['address'] as String?,
       clinicalData: json['clinical_data'] != null
-          ? Map<String, dynamic>.from(json['clinical_data'] as Map)
+          ? (json['clinical_data'] is String
+              // SQLite almacena clinical_data como JSON string
+              ? Map<String, dynamic>.from(
+                  _decodeClinicalData(json['clinical_data'] as String))
+              // Supabase devuelve clinical_data como Map (JSONB)
+              : Map<String, dynamic>.from(json['clinical_data'] as Map))
           : null,
       totalSessions: (json['total_sessions'] as int?) ?? 0,
       psychologistId: json['psychologist_id'] as String?,
@@ -65,6 +72,14 @@ class PatientModel {
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
     };
+  }
+
+  static Map<String, dynamic> _decodeClinicalData(String raw) {
+    try {
+      return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    } catch (_) {
+      return {};
+    }
   }
 
   PatientModel copyWith({
