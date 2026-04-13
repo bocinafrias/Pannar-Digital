@@ -40,6 +40,10 @@ void main() async {
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15cHRhdG9scm9reXVsZ2psb3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMjE3NzcsImV4cCI6MjA4MDc5Nzc3N30.Dlmp3Lu7yMQdC2pQFGrIDIIYSryISMw0iqHOehSfpns',
   );
 
+  // Ping keep-alive para evitar que Supabase free-tier pause el proyecto
+  // por inactividad. Se ejecuta máximo una vez cada 4 días.
+  SyncService().keepAlive();
+
   runApp(const PannarDigitalApp());
 }
 

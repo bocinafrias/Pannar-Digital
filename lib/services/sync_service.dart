@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/supabase_config.dart';
 import '../services/database_service.dart';
 import '../models/patient_model.dart';
@@ -147,4 +149,33 @@ class SyncService {
   // Stream de cambios de conectividad
   Stream<ConnectivityResult> get connectivityStream =>
       _connectivity.onConnectivityChanged;
+
+  /// Envía un ping liviano a Supabase para evitar que el proyecto free-tier
+  /// se pause por inactividad (Supabase pausa tras ~1 semana sin llamadas API).
+  /// Solo se ejecuta una vez cada 4 días para no afectar el rendimiento.
+  Future<void> keepAlive() async {
+    try {
+      // Verificar conexión antes de intentar el ping
+      final connected = await hasConnection();
+      if (!connected) return;
+
+      // Leer la última vez que se hizo el ping
+      final prefs = await SharedPreferences.getInstance();
+      final lastPingMs = prefs.getInt('supabase_last_ping') ?? 0;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      const fourDaysMs = 4 * 24 * 60 * 60 * 1000;
+
+      if (now - lastPingMs < fourDaysMs) return; // Aún no toca
+
+      // Ping: SELECT mínimo a la tabla users (1 fila, solo columna id)
+      await _supabase.from('users').select('id').limit(1);
+
+      // Guardar timestamp del ping exitoso
+      await prefs.setInt('supabase_last_ping', now);
+      debugPrint('✅ Supabase keep-alive ping enviado.');
+    } catch (e) {
+      // Silencioso: si falla el ping no interrumpe el flujo de la app
+      debugPrint('⚠️ Supabase keep-alive falló (se reintentará): $e');
+    }
+  }
 }
