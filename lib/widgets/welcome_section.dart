@@ -66,23 +66,23 @@ class WelcomeSection extends StatelessWidget {
     if (userGender != null) {
       if (userGender!.toUpperCase() == 'F' ||
           userGender!.toLowerCase().contains('fem')) {
-        return 'Bienvenida, $userName';
+        return 'Hola, $userName';
       } else if (userGender!.toUpperCase() == 'M' ||
           userGender!.toLowerCase().contains('masc')) {
-        return 'Bienvenido, $userName';
+        return 'Hola, $userName';
       }
     }
 
     // Intentar detectar del nombre
     final firstName = nameLower.split(' ').first;
     if (femaleNames.any((name) => firstName.contains(name))) {
-      return 'Bienvenida, $userName';
+      return 'Hola, $userName';
     } else if (maleNames.any((name) => firstName.contains(name))) {
-      return 'Bienvenido, $userName';
+      return 'Hola, $userName';
     }
 
     // Por defecto, usar forma neutra
-    return 'Bienvenido/a, $userName';
+    return 'Hola, $userName';
   }
 
   @override
