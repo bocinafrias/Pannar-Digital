@@ -7,6 +7,7 @@ import '../widgets/sidebar.dart';
 import '../widgets/top_bar.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
+import '../data/tabasco_communities.dart';
 
 class PatientFormScreen extends StatefulWidget {
   final String? patientId;
@@ -25,6 +26,10 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
+
+  // Community autocomplete
+  final _communityController = TextEditingController();
+  String? _selectedCommunity;
 
   DateTime? _dateOfBirth;
   String? _selectedGender;
@@ -68,6 +73,11 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
         _emailController.text = patient.email ?? '';
         _phoneController.text = patient.phone ?? '';
         _addressController.text = patient.address ?? '';
+        // Comunidad: intentar mapear el valor guardado al catálogo
+        final savedAddress = patient.address ?? '';
+        final match = findCommunity(savedAddress);
+        _selectedCommunity = match != null ? savedAddress : null;
+        _communityController.text = savedAddress;
         _dateOfBirth = patient.dateOfBirth;
         _selectedGender = patient.gender;
         _originalCreatedAt = patient.createdAt;
@@ -177,7 +187,7 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
         email: _emailController.text.isEmpty ? null : _emailController.text,
         phone: _phoneController.text.isEmpty ? null : _phoneController.text,
         address:
-            _addressController.text.isEmpty ? null : _addressController.text,
+            _communityController.text.isEmpty ? null : _communityController.text,
         dateOfBirth: _dateOfBirth,
         gender: _selectedGender,
         psychologistId: psychologistId,
@@ -394,13 +404,12 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
                               },
                             ),
                             const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _addressController,
-                              decoration: const InputDecoration(
-                                labelText: 'Dirección',
-                                border: OutlineInputBorder(),
-                              ),
-                              maxLines: 2,
+                            // ── Comunidad / Colonia ───────────────────────
+                            _CommunityAutocomplete(
+                              controller: _communityController,
+                              onSelected: (value) {
+                                setState(() => _selectedCommunity = value);
+                              },
                             ),
                             const SizedBox(height: 24),
                             SizedBox(
@@ -452,6 +461,160 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
     _emailController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
+    _communityController.dispose();
     super.dispose();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Widget de autocompletado de comunidades
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CommunityAutocomplete extends StatefulWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onSelected;
+
+  const _CommunityAutocomplete({
+    required this.controller,
+    required this.onSelected,
+  });
+
+  @override
+  State<_CommunityAutocomplete> createState() => _CommunityAutocompleteState();
+}
+
+class _CommunityAutocompleteState extends State<_CommunityAutocomplete> {
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Autocomplete<CommunityEntry>(
+      initialValue: TextEditingValue(text: widget.controller.text),
+      displayStringForOption: (entry) => entry.displayName,
+      optionsBuilder: (TextEditingValue textEditingValue) {
+        if (textEditingValue.text.isEmpty) {
+          // Sin texto: mostrar todas las de Jalpa de Méndez primero
+          return tabascoCommunitiesData
+              .where((e) => e.municipality == 'Jalpa de Méndez')
+              .followedBy(
+                tabascoCommunitiesData
+                    .where((e) => e.municipality != 'Jalpa de Méndez'),
+              );
+        }
+        final query = textEditingValue.text.toLowerCase();
+        // Primero las que coincidan de Jalpa de Méndez, luego el resto
+        final jalpa = tabascoCommunitiesData
+            .where((e) =>
+                e.municipality == 'Jalpa de Méndez' &&
+                e.displayName.toLowerCase().contains(query))
+            .toList();
+        final rest = tabascoCommunitiesData
+            .where((e) =>
+                e.municipality != 'Jalpa de Méndez' &&
+                e.displayName.toLowerCase().contains(query))
+            .toList();
+        return [...jalpa, ...rest];
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 280),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (context, index) {
+                  final entry = options.elementAt(index);
+                  final isJalpa = entry.municipality == 'Jalpa de Méndez';
+                  return InkWell(
+                    onTap: () => onSelected(entry),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isJalpa
+                                ? Icons.location_on
+                                : Icons.location_on_outlined,
+                            size: 16,
+                            color: isJalpa
+                                ? const Color(0xFF1E3A5F)
+                                : Colors.grey,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  entry.name,
+                                  style: TextStyle(
+                                    fontWeight: isJalpa
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                    color: isJalpa
+                                        ? const Color(0xFF1E3A5F)
+                                        : Colors.black87,
+                                  ),
+                                ),
+                                Text(
+                                  '${entry.type} · ${entry.municipality}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+      onSelected: (CommunityEntry entry) {
+        widget.controller.text = entry.displayName;
+        widget.onSelected(entry.displayName);
+      },
+      fieldViewBuilder:
+          (context, textEditingController, focusNode, onFieldSubmitted) {
+        // Sync external controller → internal controller on first build
+        if (textEditingController.text != widget.controller.text &&
+            widget.controller.text.isNotEmpty) {
+          textEditingController.text = widget.controller.text;
+        }
+        // Keep our external controller in sync when the user types
+        textEditingController.addListener(() {
+          widget.controller.text = textEditingController.text;
+        });
+        return TextFormField(
+          controller: textEditingController,
+          focusNode: focusNode,
+          decoration: const InputDecoration(
+            labelText: 'Comunidad / Colonia',
+            hintText: 'Busca o escribe la comunidad',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.location_on_outlined),
+          ),
+          onFieldSubmitted: (_) => onFieldSubmitted(),
+        );
+      },
+    );
   }
 }
