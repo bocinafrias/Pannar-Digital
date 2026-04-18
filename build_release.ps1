@@ -10,6 +10,13 @@ if (-not (Test-Path "pubspec.yaml")) {
     exit 1
 }
 
+# Verificar que existe el archivo .env con las credenciales de Supabase
+if (-not (Test-Path ".env")) {
+    Write-Host "Error: No se encuentra el archivo .env con las credenciales de Supabase." -ForegroundColor Red
+    Write-Host "Copia .env.example a .env y complétalo con tus credenciales." -ForegroundColor Yellow
+    exit 1
+}
+
 # Limpiar builds anteriores (opcional, comentar si no quieres limpiar)
 $limpiar = Read-Host "¿Deseas limpiar builds anteriores? (S/N)"
 if ($limpiar -eq "S" -or $limpiar -eq "s") {
@@ -30,7 +37,7 @@ Write-Host ""
 # Compilar en modo release
 Write-Host "Compilando en modo RELEASE..." -ForegroundColor Green
 Write-Host "Esto puede tardar varios minutos..." -ForegroundColor Yellow
-flutter build windows --release
+flutter build windows --release --dart-define-from-file=.env
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host ""

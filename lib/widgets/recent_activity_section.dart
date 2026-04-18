@@ -19,6 +19,7 @@ class RecentActivitySection extends StatefulWidget {
 
 class _RecentActivitySectionState extends State<RecentActivitySection> {
   final _db = DatabaseService();
+  late final DataNotificationService _notificationService;
   List<Map<String, dynamic>> _activities = [];
   bool _isLoading = true;
 
@@ -26,18 +27,14 @@ class _RecentActivitySectionState extends State<RecentActivitySection> {
   void initState() {
     super.initState();
     _loadRecentActivity();
-    // Escuchar cambios en los datos
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.addListener(_loadRecentActivity);
+    // Guardamos la referencia para que el dispose use la MISMA instancia.
+    _notificationService = context.read<DataNotificationService>();
+    _notificationService.addListener(_loadRecentActivity);
   }
 
   @override
   void dispose() {
-    // Remover listener para evitar memory leaks
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.removeListener(_loadRecentActivity);
+    _notificationService.removeListener(_loadRecentActivity);
     super.dispose();
   }
 
@@ -49,12 +46,13 @@ class _RecentActivitySectionState extends State<RecentActivitySection> {
         psychologistId: widget.psychologistId,
         psychologistName: widget.psychologistName,
       );
+      if (!mounted) return;
       setState(() {
         _activities = activities;
         _isLoading = false;
       });
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
       debugPrint('Error cargando actividad reciente: $e');
     }
   }
@@ -190,7 +188,7 @@ class _ActivityItem extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: iconColor.withOpacity(0.1),
+            color: iconColor.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(

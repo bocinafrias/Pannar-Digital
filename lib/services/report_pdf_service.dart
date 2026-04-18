@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
@@ -24,7 +25,7 @@ class ReportPdfService {
       final letterheadBytes = await rootBundle.load(letterheadAsset);
       letterheadImage = pw.MemoryImage(letterheadBytes.buffer.asUint8List());
     } catch (e) {
-      print('No se pudo cargar $letterheadAsset: $e');
+      debugPrint('No se pudo cargar $letterheadAsset: $e');
     }
 
     // Obtener datos del reporte
@@ -136,7 +137,7 @@ class ReportPdfService {
         pw.SizedBox(height: 8),
         pw.Text(
           'Área que informa: Programa de Atención a Niñas, Niños y Adolescentes en Riesgo. PANNAR.',
-          style: pw.TextStyle(fontSize: 11, color: PdfColors.black),
+          style: const pw.TextStyle(fontSize: 11, color: PdfColors.black),
         ),
         pw.SizedBox(height: 8),
         pw.Text(
@@ -169,7 +170,7 @@ class ReportPdfService {
 
     return pw.Text(
       'Durante el periodo comprendido del ${startDate.day} al ${endDate.day} de ${_capitalizeMonth(dateFormat.format(startDate))} del presente año, se llevaron a cabo actividades correspondientes al área de atención psicológica. En este lapso, se impartieron terapias psicológicas, dichas intervenciones fueron realizadas por $psychologistName.',
-      style: pw.TextStyle(fontSize: 10, color: PdfColors.black),
+      style: const pw.TextStyle(fontSize: 10, color: PdfColors.black),
       textAlign: pw.TextAlign.left,
     );
   }
@@ -196,7 +197,7 @@ class ReportPdfService {
             pw.Expanded(
               child: pw.Text(
                 'Hombres',
-                style: pw.TextStyle(fontSize: 10, color: PdfColors.black),
+                style: const pw.TextStyle(fontSize: 10, color: PdfColors.black),
               ),
             ),
             pw.Text(
@@ -215,7 +216,7 @@ class ReportPdfService {
             pw.Expanded(
               child: pw.Text(
                 'Mujeres',
-                style: pw.TextStyle(fontSize: 10, color: PdfColors.black),
+                style: const pw.TextStyle(fontSize: 10, color: PdfColors.black),
               ),
             ),
             pw.Text(
@@ -234,7 +235,7 @@ class ReportPdfService {
             pw.Expanded(
               child: pw.Text(
                 'Comunidades',
-                style: pw.TextStyle(fontSize: 10, color: PdfColors.black),
+                style: const pw.TextStyle(fontSize: 10, color: PdfColors.black),
               ),
             ),
             pw.Text(
@@ -596,7 +597,7 @@ class ReportPdfService {
         ] else
           pw.Text(
             'No hay datos disponibles',
-            style: pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+            style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
           ),
       ],
     );
@@ -691,7 +692,7 @@ class ReportPdfService {
         ] else
           pw.Text(
             'No hay datos disponibles',
-            style: pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+            style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
           ),
       ],
     );

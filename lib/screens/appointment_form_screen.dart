@@ -70,6 +70,7 @@ class _AppointmentFormScreenState extends State<AppointmentFormScreen> {
     }
 
     final patients = await _db.getPatients(psychologistId: psychologistId);
+    if (!mounted) return;
     setState(() => _patients = patients);
   }
 
@@ -87,24 +88,11 @@ class _AppointmentFormScreenState extends State<AppointmentFormScreen> {
       setState(() => _selectedPatientId = appointment.patientId);
     }
 
-    // Cargar psicólogo responsable
-    // Si el psychologist_id es un ID (UUID), intentar obtener el nombre
-    // Si no, mostrar el valor tal cual (puede ser nombre de citas antiguas)
+    // Cargar psicólogo responsable: resolver UUID a nombre
     if (appointment.psychologistId.isNotEmpty) {
       final authService = context.read<AuthService>();
-      try {
-        final users = await authService.getUsers();
-        final user = users
-            .where(
-              (u) => u.id == appointment.psychologistId,
-            )
-            .firstOrNull;
-        // Si encontramos el usuario, mostrar su nombre, sino mostrar el valor original
-        _psychologistController.text = user?.name ?? appointment.psychologistId;
-      } catch (e) {
-        // Si hay error, mostrar el valor original
-        _psychologistController.text = appointment.psychologistId;
-      }
+      final name = await authService.getUserNameById(appointment.psychologistId);
+      if (mounted) _psychologistController.text = name;
     }
   }
 
@@ -201,6 +189,7 @@ class _AppointmentFormScreenState extends State<AppointmentFormScreen> {
 
       // Si es psicólogo, usar su ID para el psychologist_id
       // El campo de texto puede mostrar el nombre, pero guardamos el ID
+      if (!mounted) return;
       final authService = context.read<AuthService>();
       final currentUser = authService.currentUserModel;
       String psychologistId;
@@ -273,16 +262,15 @@ class _AppointmentFormScreenState extends State<AppointmentFormScreen> {
               Center(
                 child: ElevatedButton(
                   onPressed: () async {
+                    // Capturamos el router ANTES del await para no usar el
+                    // BuildContext del diálogo después de un async gap.
+                    final router = GoRouter.of(context);
                     Navigator.of(context).pop(); // Cerrar diálogo
-                    if (mounted) {
-                      context.pop(); // Cerrar formulario
-                      // Delay para asegurar que la base de datos se actualice y la notificación se propague
-                      await Future.delayed(const Duration(milliseconds: 300));
-                      if (mounted) {
-                        // Redirigir al calendario - esto forzará una recarga
-                        context.go('/calendar');
-                      }
-                    }
+                    router.pop(); // Cerrar formulario
+                    // Delay para asegurar que la base de datos se actualice y la notificación se propague
+                    await Future.delayed(const Duration(milliseconds: 300));
+                    // Redirigir al calendario - esto forzará una recarga
+                    router.go('/calendar');
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1E3A5F),
@@ -300,7 +288,7 @@ class _AppointmentFormScreenState extends State<AppointmentFormScreen> {
         },
       );
     } catch (e) {
-      setState(() => _isSaving = false);
+      if (mounted) setState(() => _isSaving = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -363,7 +351,7 @@ class _AppointmentFormScreenState extends State<AppointmentFormScreen> {
                             const SizedBox(height: 24),
                             // Selección de paciente
                             DropdownButtonFormField<String>(
-                              value: _selectedPatientId,
+                              initialValue: _selectedPatientId,
                               decoration: const InputDecoration(
                                 labelText: 'Paciente *',
                                 border: OutlineInputBorder(),
@@ -378,8 +366,9 @@ class _AppointmentFormScreenState extends State<AppointmentFormScreen> {
                                 setState(() => _selectedPatientId = patientId);
                               },
                               validator: (value) {
-                                if (value == null || value.isEmpty)
+                                if (value == null || value.isEmpty) {
                                   return 'Selecciona un paciente';
+                                }
                                 return null;
                               },
                             ),
@@ -432,7 +421,7 @@ class _AppointmentFormScreenState extends State<AppointmentFormScreen> {
                             const SizedBox(height: 16),
                             // Estado
                             DropdownButtonFormField<AppointmentStatus>(
-                              value: _status,
+                              initialValue: _status,
                               decoration: const InputDecoration(
                                 labelText: 'Estado',
                                 border: OutlineInputBorder(),

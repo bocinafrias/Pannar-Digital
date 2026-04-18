@@ -216,6 +216,8 @@ class _AgendaItem extends StatelessWidget {
     final db = DatabaseService();
     final patient = await db.getPatientById(appointment.patientId);
 
+    if (!context.mounted) return;
+
     final dateFormat = DateFormat('EEEE, d \'de\' MMMM \'de\' y', 'es');
     final timeFormat = DateFormat('HH:mm', 'es');
 

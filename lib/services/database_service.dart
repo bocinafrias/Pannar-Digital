@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/appointment_model.dart';
@@ -26,7 +27,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'pannar_digital.db');
     final db = await openDatabase(
       path,
-      version: 5, // v5: soft-deletes + tabla reports
+      version: 6, // v6: índices en deleted_at para acelerar queries con soft-delete
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -55,11 +56,11 @@ class DatabaseService {
         for (final col in columns) {
           if (!existing.contains(col)) {
             await db.execute('ALTER TABLE $table ADD COLUMN $col TEXT');
-            print('_ensureColumnsExist: $col añadido a $table');
+            debugPrint('_ensureColumnsExist: $col añadido a $table');
           }
         }
       } catch (e) {
-        print('_ensureColumnsExist error en $table: $e');
+        debugPrint('_ensureColumnsExist error en $table: $e');
       }
     }
 
@@ -78,7 +79,7 @@ class DatabaseService {
         )
       ''');
     } catch (e) {
-      print('_ensureColumnsExist: error creando tabla reports: $e');
+      debugPrint('_ensureColumnsExist: error creando tabla reports: $e');
     }
   }
 
@@ -163,6 +164,13 @@ class DatabaseService {
     await db.execute(
         'CREATE INDEX idx_patients_psychologist ON patients(psychologist_id)');
     await db.execute('CREATE INDEX idx_talks_date ON talks(date)');
+    // Índices en deleted_at: todos los queries de lectura filtran por
+    // 'deleted_at IS NULL', por lo que sin índice serían O(n).
+    await db.execute(
+        'CREATE INDEX idx_patients_deleted ON patients(deleted_at)');
+    await db.execute(
+        'CREATE INDEX idx_appointments_deleted ON appointments(deleted_at)');
+    await db.execute('CREATE INDEX idx_talks_deleted ON talks(deleted_at)');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -174,7 +182,7 @@ class DatabaseService {
         );
       } catch (e) {
         // La columna ya existe, ignorar error
-        print('Columna attended ya existe o error al agregarla: $e');
+        debugPrint('Columna attended ya existe o error al agregarla: $e');
       }
     }
     if (oldVersion < 3) {
@@ -198,7 +206,7 @@ class DatabaseService {
         await db.execute(
             'CREATE INDEX IF NOT EXISTS idx_talks_date ON talks(date)');
       } catch (e) {
-        print('Error al crear tabla talks: $e');
+        debugPrint('Error al crear tabla talks: $e');
       }
     }
     if (oldVersion < 4) {
@@ -213,7 +221,7 @@ class DatabaseService {
               'CREATE INDEX IF NOT EXISTS idx_patients_psychologist ON patients(psychologist_id)');
         }
       } catch (e) {
-        print('Error en migración v4 psychologist_id: $e');
+        debugPrint('Error en migración v4 psychologist_id: $e');
       }
     }
 
@@ -225,10 +233,10 @@ class DatabaseService {
           if (!info.any((col) => col['name'] == 'deleted_at')) {
             await db.execute(
                 'ALTER TABLE $table ADD COLUMN deleted_at TEXT');
-            print('Columna deleted_at agregada a $table');
+            debugPrint('Columna deleted_at agregada a $table');
           }
         } catch (e) {
-          print('Error agregando deleted_at a $table: $e');
+          debugPrint('Error agregando deleted_at a $table: $e');
         }
       }
       // Crear tabla de reportes si no existe
@@ -245,9 +253,26 @@ class DatabaseService {
             created_at TEXT NOT NULL
           )
         ''');
-        print('Tabla reports creada en migración v5');
+        debugPrint('Tabla reports creada en migración v5');
       } catch (e) {
-        print('Error creando tabla reports: $e');
+        debugPrint('Error creando tabla reports: $e');
+      }
+    }
+
+    if (oldVersion < 6) {
+      // Crear índices en deleted_at para acelerar los queries que filtran
+      // por 'deleted_at IS NULL' (todos los de lectura).
+      const indexStatements = [
+        'CREATE INDEX IF NOT EXISTS idx_patients_deleted ON patients(deleted_at)',
+        'CREATE INDEX IF NOT EXISTS idx_appointments_deleted ON appointments(deleted_at)',
+        'CREATE INDEX IF NOT EXISTS idx_talks_deleted ON talks(deleted_at)',
+      ];
+      for (final stmt in indexStatements) {
+        try {
+          await db.execute(stmt);
+        } catch (e) {
+          debugPrint('Error creando índice deleted_at: $e');
+        }
       }
     }
   }
@@ -428,7 +453,7 @@ class DatabaseService {
     final db = await database;
     final maps = await db.query(
       'appointments',
-      where: 'id = ?',
+      where: 'id = ? AND deleted_at IS NULL',
       whereArgs: [id],
     );
     if (maps.isEmpty) return null;
@@ -480,7 +505,7 @@ class DatabaseService {
       }
 
       if (conditions.isNotEmpty) {
-        where += ' AND (' + conditions.join(' OR ') + ')';
+        where += ' AND (${conditions.join(' OR ')})';
         whereArgs.addAll(conditionArgs);
       }
     }
@@ -519,7 +544,7 @@ class DatabaseService {
       final placeholders = List.filled(chunk.length, '?').join(',');
       final maps = await db.query(
         'patients',
-        where: 'id IN ($placeholders)',
+        where: 'id IN ($placeholders) AND deleted_at IS NULL',
         whereArgs: chunk,
       );
       patients.addAll(maps.map((m) => PatientModel.fromJson(m)));
@@ -661,7 +686,10 @@ class DatabaseService {
       appointments = appointmentModels.map((a) => a.toJson()).toList();
     } else {
       final db = await database;
-      appointments = await db.query('appointments');
+      appointments = await db.query(
+        'appointments',
+        where: 'deleted_at IS NULL',
+      );
     }
 
     int completed = 0;
@@ -734,6 +762,7 @@ class DatabaseService {
     } else {
       recentPatients = await db.query(
         'patients',
+        where: 'deleted_at IS NULL',
         orderBy: 'created_at DESC',
         limit: limit,
       );
@@ -777,7 +806,7 @@ class DatabaseService {
     } else {
       recentAppointments = await db.query(
         'appointments',
-        where: 'status IN (?, ?)',
+        where: 'status IN (?, ?) AND deleted_at IS NULL',
         whereArgs: ['completed', 'cancelled'],
         orderBy: 'updated_at DESC, created_at DESC',
         limit: limit,
@@ -911,7 +940,7 @@ class DatabaseService {
     final db = await database;
     final maps = await db.query(
       'talks',
-      where: 'id = ?',
+      where: 'id = ? AND deleted_at IS NULL',
       whereArgs: [id],
     );
     if (maps.isEmpty) return null;

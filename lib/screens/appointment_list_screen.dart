@@ -21,6 +21,7 @@ class AppointmentListScreen extends StatefulWidget {
 class _AppointmentListScreenState extends State<AppointmentListScreen> {
   final _db = DatabaseService();
   final _searchController = TextEditingController();
+  late final DataNotificationService _notificationService;
   List<AppointmentModel> _appointments = [];
   List<AppointmentModel> _filteredAppointments = [];
   Map<String, PatientModel> _patientsMap = {};
@@ -31,20 +32,16 @@ class _AppointmentListScreenState extends State<AppointmentListScreen> {
     super.initState();
     _loadAppointments();
     _searchController.addListener(_filterAppointments);
-    // Escuchar cambios en los datos
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.addListener(_loadAppointments);
+    // Guardamos la referencia para que el dispose use la MISMA instancia.
+    _notificationService = context.read<DataNotificationService>();
+    _notificationService.addListener(_loadAppointments);
   }
 
   @override
   void dispose() {
     _searchController.removeListener(_filterAppointments);
     _searchController.dispose();
-    // Remover listener
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.removeListener(_loadAppointments);
+    _notificationService.removeListener(_loadAppointments);
     super.dispose();
   }
 
@@ -322,7 +319,7 @@ class _AppointmentListScreenState extends State<AppointmentListScreen> {
                                                         color: _getStatusColor(
                                                                 appointment
                                                                     .status)
-                                                            .withOpacity(0.2),
+                                                            .withValues(alpha: 0.2),
                                                         borderRadius:
                                                             BorderRadius
                                                                 .circular(4),
@@ -348,17 +345,17 @@ class _AppointmentListScreenState extends State<AppointmentListScreen> {
                                             trailing: PopupMenuButton<String>(
                                               onSelected: (value) async {
                                                 if (value == 'edit') {
+                                                  final router =
+                                                      GoRouter.of(context);
                                                   await Future.delayed(
                                                     const Duration(
                                                       milliseconds: 100,
                                                     ),
                                                   );
-                                                  if (mounted) {
-                                                    context.go(
-                                                      '/appointment/new',
-                                                      extra: appointment,
-                                                    );
-                                                  }
+                                                  router.go(
+                                                    '/appointment/new',
+                                                    extra: appointment,
+                                                  );
                                                 } else if (value == 'delete') {
                                                   _deleteAppointment(
                                                       appointment);
@@ -396,17 +393,17 @@ class _AppointmentListScreenState extends State<AppointmentListScreen> {
                                               ],
                                             ),
                                             onTap: () async {
+                                              final router =
+                                                  GoRouter.of(context);
                                               await Future.delayed(
                                                 const Duration(
                                                   milliseconds: 100,
                                                 ),
                                               );
-                                              if (mounted) {
-                                                context.go(
-                                                  '/appointment/new',
-                                                  extra: appointment,
-                                                );
-                                              }
+                                              router.go(
+                                                '/appointment/new',
+                                                extra: appointment,
+                                              );
                                             },
                                           ),
                                         );

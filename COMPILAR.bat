@@ -11,6 +11,14 @@ if not exist "pubspec.yaml" (
     exit /b 1
 )
 
+REM Verificar que existe el archivo .env con las credenciales de Supabase
+if not exist ".env" (
+    echo Error: No se encuentra el archivo .env con las credenciales de Supabase.
+    echo Copia .env.example a .env y completalo con tus credenciales.
+    pause
+    exit /b 1
+)
+
 REM Limpiar builds anteriores (opcional)
 set /p limpiar="Deseas limpiar builds anteriores? (S/N): "
 if /i "%limpiar%"=="S" (
@@ -32,7 +40,7 @@ echo.
 REM Compilar en modo release
 echo Compilando en modo RELEASE...
 echo Esto puede tardar varios minutos...
-flutter build windows --release
+flutter build windows --release --dart-define-from-file=.env
 
 if errorlevel 1 (
     echo.

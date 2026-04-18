@@ -120,6 +120,7 @@ class _ReportGeneratorDialogState extends State<ReportGeneratorDialog> {
       });
 
       // Paso 2: Generar PDF (50%)
+      if (!mounted) return;
       final authService = Provider.of<AuthService>(context, listen: false);
       final userName = authService.currentUserModel?.name ?? 'Usuario';
 
@@ -171,8 +172,8 @@ class _ReportGeneratorDialogState extends State<ReportGeneratorDialog> {
         );
       }
     } catch (e, stackTrace) {
-      print('Error generando reporte: $e');
-      print('Stack trace: $stackTrace');
+      debugPrint('Error generando reporte: $e');
+      debugPrint('Stack trace: $stackTrace');
       if (mounted) {
         setState(() {
           _isGenerating = false;

@@ -21,8 +21,10 @@ class ClinicalHistoryScreen extends StatefulWidget {
 class _ClinicalHistoryScreenState extends State<ClinicalHistoryScreen> {
   final _db = DatabaseService();
   final _searchController = TextEditingController();
+  late final DataNotificationService _notificationService;
   List<PatientModel> _patients = [];
   Map<String, List<AppointmentModel>> _patientAppointments = {};
+  Map<String, String> _psychologistNames = {}; // id → nombre
   List<PatientModel> _filteredPatients = [];
   bool _isLoading = true;
 
@@ -31,19 +33,15 @@ class _ClinicalHistoryScreenState extends State<ClinicalHistoryScreen> {
     super.initState();
     _loadClinicalHistory();
     _searchController.addListener(_filterPatients);
-    // Escuchar cambios en los datos
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.addListener(_loadClinicalHistory);
+    // Guardamos la referencia para que el dispose use la MISMA instancia.
+    _notificationService = context.read<DataNotificationService>();
+    _notificationService.addListener(_loadClinicalHistory);
   }
 
   @override
   void dispose() {
     _searchController.dispose();
-    // Remover listener
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.removeListener(_loadClinicalHistory);
+    _notificationService.removeListener(_loadClinicalHistory);
     super.dispose();
   }
 
@@ -85,9 +83,14 @@ class _ClinicalHistoryScreenState extends State<ClinicalHistoryScreen> {
         appointments.sort((a, b) => b.dateTime.compareTo(a.dateTime));
       });
 
+      // Cargar mapa de nombres de psicólogos
+      final users = await authService.getUsers();
+      final nameMap = {for (final u in users) u.id: u.name};
+
       setState(() {
         _patients = patients;
         _patientAppointments = appointmentsMap;
+        _psychologistNames = nameMap;
         _filteredPatients = patients;
         _isLoading = false;
       });
@@ -177,6 +180,7 @@ class _ClinicalHistoryScreenState extends State<ClinicalHistoryScreen> {
                                         return _PatientHistoryCard(
                                           patient: patient,
                                           appointments: appointments,
+                                          psychologistNames: _psychologistNames,
                                           onTap: () {
                                             context.go('/patient/${patient.id}');
                                           },
@@ -200,11 +204,13 @@ class _ClinicalHistoryScreenState extends State<ClinicalHistoryScreen> {
 class _PatientHistoryCard extends StatelessWidget {
   final PatientModel patient;
   final List<AppointmentModel> appointments;
+  final Map<String, String> psychologistNames;
   final VoidCallback onTap;
 
   const _PatientHistoryCard({
     required this.patient,
     required this.appointments,
+    required this.psychologistNames,
     required this.onTap,
   });
 
@@ -263,7 +269,7 @@ class _PatientHistoryCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: appointments.isEmpty
                           ? Colors.grey[300]
-                          : const Color(0xFF1E3A5F).withOpacity(0.1),
+                          : const Color(0xFF1E3A5F).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -333,7 +339,8 @@ class _PatientHistoryCard extends StatelessWidget {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  appointment.psychologistId,
+                                  psychologistNames[appointment.psychologistId] ??
+                                      appointment.psychologistId,
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.grey[600],

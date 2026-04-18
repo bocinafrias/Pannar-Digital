@@ -75,6 +75,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     );
 
     if (confirmed != true) return;
+    if (!mounted) return;
 
     try {
       await context.read<AuthService>().updateUserRole(user.id, newRole);
@@ -262,7 +263,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E3A5F).withOpacity(.1),
+                color: const Color(0xFF1E3A5F).withValues(alpha: .1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
@@ -284,7 +285,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(.05),
+              color: Colors.black.withValues(alpha: .05),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -333,7 +334,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.green.withOpacity(.1),
+                color: Colors.green.withValues(alpha: .1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Text('Tú',

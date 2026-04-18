@@ -33,12 +33,8 @@ void main() async {
   // Inicializar notificaciones nativas de Windows (RF-10)
   await AppointmentNotificationService.initialize();
 
-  // Credenciales de Supabase configuradas
-  await SupabaseConfig.initialize(
-    url: 'https://myptatolrokyulgjlouk.supabase.co',
-    anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15cHRhdG9scm9reXVsZ2psb3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMjE3NzcsImV4cCI6MjA4MDc5Nzc3N30.Dlmp3Lu7yMQdC2pQFGrIDIIYSryISMw0iqHOehSfpns',
-  );
+  // Credenciales de Supabase: leídas desde .env vía --dart-define-from-file
+  await SupabaseConfig.initialize();
 
   // Ping keep-alive para evitar que Supabase free-tier pause el proyecto
   // por inactividad. Se ejecuta máximo una vez cada 4 días.

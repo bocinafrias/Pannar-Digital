@@ -21,7 +21,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _localAuth = LocalAuthService();
-  final _syncService = SyncService();
+  late final SyncService _syncService;
 
   bool _hasPin = false;
   bool _notificationsEnabled = true;
@@ -33,23 +33,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    _syncService = context.read<SyncService>();
     _loadState();
   }
 
   Future<void> _loadState() async {
-    final prefs = await SharedPreferences.getInstance();
-    final hasPin = await _localAuth.hasPinConfigured();
-    final lastSync = await _localAuth.getLastSync();
-    final isOnline = await _syncService.hasConnection();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasPin = await _localAuth.hasPinConfigured();
+      final lastSync = await _localAuth.getLastSync();
+      final isOnline = await _syncService.hasConnection();
 
-    if (!mounted) return;
-    setState(() {
-      _hasPin = hasPin;
-      _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
-      _lastSync = lastSync;
-      _isOnline = isOnline;
-      _loading = false;
-    });
+      if (!mounted) return;
+      setState(() {
+        _hasPin = hasPin;
+        _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
+        _lastSync = lastSync;
+        _isOnline = isOnline;
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('Error cargando configuración: $e');
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
   }
 
   // ── PIN ───────────────────────────────────────────────────────────────────
@@ -73,6 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _showChangePinDialog() async {
     final currentOk = await _verifyCurrentPin();
     if (currentOk != true) return;
+    if (!mounted) return;
 
     final pin = await showDialog<String>(
       context: context,
@@ -138,6 +146,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!value) {
       AppointmentNotificationService().stop();
     } else {
+      if (!mounted) return;
       final user = context.read<AuthService>().currentUserModel;
       if (user != null) AppointmentNotificationService().start(user);
     }
@@ -310,7 +319,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(.05),
+              color: Colors.black.withValues(alpha: .05),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -470,7 +479,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 'Avisos de Windows al iniciar sesión y cada hora',
               ),
               value: _notificationsEnabled,
-              activeColor: const Color(0xFF1E3A5F),
+              activeThumbColor: const Color(0xFF1E3A5F),
               onChanged: _toggleNotifications,
             ),
           ]),
@@ -581,23 +590,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _sectionLabel('Acerca de'),
-          _card([
+          _card(const [
             ListTile(
-              leading: const Icon(
+              leading: Icon(
                 Icons.apps_outlined,
                 color: Color(0xFF1E3A5F),
               ),
-              title: const Text('PANNAR Digital'),
-              subtitle: const Text('Versión 1.0.0'),
+              title: Text('PANNAR Digital'),
+              subtitle: Text('Versión 1.0.0'),
             ),
             ListTile(
-              leading: const Icon(
+              leading: Icon(
                 Icons.business_outlined,
                 color: Color(0xFF1E3A5F),
               ),
-              title: const Text('Institución'),
-              subtitle:
-                  const Text('DIF Jalpa de Méndez — Área PANNAR'),
+              title: Text('Institución'),
+              subtitle: Text('DIF Jalpa de Méndez — Área PANNAR'),
             ),
           ]),
         ],

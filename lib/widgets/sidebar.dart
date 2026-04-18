@@ -49,7 +49,7 @@ class Sidebar extends StatelessWidget {
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
-              children: [
+              children: const [
                 _NavItem(
                   icon: Icons.dashboard,
                   title: 'Inicio',
@@ -80,7 +80,7 @@ class Sidebar extends StatelessWidget {
                   title: 'Reportes',
                   route: '/reports',
                 ),
-                const Divider(
+                Divider(
                   color: Colors.white24,
                   height: 32,
                   thickness: 1,

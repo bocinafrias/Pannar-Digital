@@ -9,6 +9,10 @@ import '../models/talk_model.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 class SyncService {
+  // Timeout para cada operación de red individual. Sin esto, una conexión
+  // lenta podría dejar la sync colgada indefinidamente.
+  static const Duration _networkTimeout = Duration(seconds: 30);
+
   final _supabase = SupabaseConfig.client;
   final _db = DatabaseService();
   final _connectivity = Connectivity();
@@ -26,8 +30,7 @@ class SyncService {
       final unsyncedData = await _db.getUnsyncedData();
 
       // Sincronizar pacientes
-      final unsyncedPatients = unsyncedData
-          .firstWhere((e) => e['table'] == 'patients')['data'] as List;
+      final unsyncedPatients = _extractTableData(unsyncedData, 'patients');
       for (var patientData in unsyncedPatients) {
         try {
           // Supabase no usa el campo 'synced'; se excluye antes de subir
@@ -38,40 +41,51 @@ class SyncService {
             try {
               uploadData['clinical_data'] =
                   jsonDecode(uploadData['clinical_data'] as String);
-            } catch (_) {}
+            } catch (e) {
+              debugPrint(
+                  'clinical_data inválido en paciente ${uploadData['id']}: $e');
+            }
           }
-          await _supabase.from('patients').upsert(uploadData);
+          await _supabase
+              .from('patients')
+              .upsert(uploadData)
+              .timeout(_networkTimeout);
           await _db.markAsSynced('patients', patientData['id'] as String);
         } catch (e) {
-          print('Error sincronizando paciente ${patientData['id']}: $e');
+          debugPrint('Error sincronizando paciente ${patientData['id']}: $e');
         }
       }
 
       // Sincronizar citas
-      final unsyncedAppointments = unsyncedData
-          .firstWhere((e) => e['table'] == 'appointments')['data'] as List;
+      final unsyncedAppointments =
+          _extractTableData(unsyncedData, 'appointments');
       for (var appointmentData in unsyncedAppointments) {
         try {
           final uploadData = Map<String, dynamic>.from(appointmentData as Map);
           uploadData.remove('synced');
-          await _supabase.from('appointments').upsert(uploadData);
+          await _supabase
+              .from('appointments')
+              .upsert(uploadData)
+              .timeout(_networkTimeout);
           await _db.markAsSynced('appointments', appointmentData['id'] as String);
         } catch (e) {
-          print('Error sincronizando cita ${appointmentData['id']}: $e');
+          debugPrint('Error sincronizando cita ${appointmentData['id']}: $e');
         }
       }
 
       // Sincronizar pláticas
-      final unsyncedTalks = unsyncedData
-          .firstWhere((e) => e['table'] == 'talks')['data'] as List;
+      final unsyncedTalks = _extractTableData(unsyncedData, 'talks');
       for (var talkData in unsyncedTalks) {
         try {
           final uploadData = Map<String, dynamic>.from(talkData as Map);
           uploadData.remove('synced');
-          await _supabase.from('talks').upsert(uploadData);
+          await _supabase
+              .from('talks')
+              .upsert(uploadData)
+              .timeout(_networkTimeout);
           await _db.markAsSynced('talks', talkData['id'] as String);
         } catch (e) {
-          print('Error sincronizando plática ${talkData['id']}: $e');
+          debugPrint('Error sincronizando plática ${talkData['id']}: $e');
         }
       }
 
@@ -85,6 +99,21 @@ class SyncService {
     }
   }
 
+  /// Extrae la lista de datos de una tabla específica del resultado de
+  /// [DatabaseService.getUnsyncedData]. Devuelve [] si la entrada no existe,
+  /// evitando que un cambio en el contrato del servicio crashee la sync.
+  List _extractTableData(
+      List<Map<String, dynamic>> unsyncedData, String tableName) {
+    for (final entry in unsyncedData) {
+      if (entry['table'] == tableName) {
+        return (entry['data'] as List?) ?? const [];
+      }
+    }
+    debugPrint(
+        'Aviso: getUnsyncedData no devolvió entrada para tabla "$tableName"');
+    return const [];
+  }
+
   /// Borra en Supabase los registros eliminados localmente y luego los elimina físicamente.
   Future<void> _syncDeletions() async {
     final deletedData = await _db.getDeletedUnsyncedData();
@@ -94,11 +123,15 @@ class SyncService {
       for (final record in records) {
         final id = record['id'] as String;
         try {
-          await _supabase.from(table).delete().eq('id', id);
+          await _supabase
+              .from(table)
+              .delete()
+              .eq('id', id)
+              .timeout(_networkTimeout);
           // Confirmado en Supabase: eliminación física local
           await _db.hardDelete(table, id);
         } catch (e) {
-          print('Error eliminando $table/$id en Supabase: $e');
+          debugPrint('Error eliminando $table/$id en Supabase: $e');
           // Se reintentará en el próximo sync (synced=0 permanece)
         }
       }
@@ -110,15 +143,18 @@ class SyncService {
     try {
       // Descargar pacientes
       // synced:true evita que los registros descargados queden como no-sincronizados
-      final patientsResponse = await _supabase.from('patients').select();
+      final patientsResponse =
+          await _supabase.from('patients').select().timeout(_networkTimeout);
       for (var patientData in patientsResponse) {
         final patient = PatientModel.fromJson(patientData);
         await _db.insertPatient(patient, synced: true);
       }
 
       // Descargar citas
-      final appointmentsResponse =
-          await _supabase.from('appointments').select();
+      final appointmentsResponse = await _supabase
+          .from('appointments')
+          .select()
+          .timeout(_networkTimeout);
       for (var appointmentData in appointmentsResponse) {
         final appointment = AppointmentModel.fromJson(appointmentData);
         await _db.insertAppointment(appointment, synced: true);
@@ -126,14 +162,15 @@ class SyncService {
 
       // Descargar pláticas
       try {
-        final talksResponse = await _supabase.from('talks').select();
+        final talksResponse =
+            await _supabase.from('talks').select().timeout(_networkTimeout);
         for (var talkData in talksResponse) {
           final talk = TalkModel.fromJson(talkData);
           await _db.insertTalk(talk, synced: true);
         }
       } catch (e) {
         // La tabla talks puede no existir aún en Supabase
-        print('Aviso: no se pudieron descargar pláticas de Supabase: $e');
+        debugPrint('Aviso: no se pudieron descargar pláticas de Supabase: $e');
       }
     } catch (e) {
       throw Exception('Error descargando datos: $e');
@@ -168,7 +205,11 @@ class SyncService {
       if (now - lastPingMs < fourDaysMs) return; // Aún no toca
 
       // Ping: SELECT mínimo a la tabla users (1 fila, solo columna id)
-      await _supabase.from('users').select('id').limit(1);
+      await _supabase
+          .from('users')
+          .select('id')
+          .limit(1)
+          .timeout(_networkTimeout);
 
       // Guardar timestamp del ping exitoso
       await prefs.setInt('supabase_last_ping', now);

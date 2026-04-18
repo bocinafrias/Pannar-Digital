@@ -17,26 +17,26 @@ class TopBar extends StatefulWidget {
 
 class _TopBarState extends State<TopBar> {
   final _db = DatabaseService();
+  late final DataNotificationService _notificationService;
   int _notificationCount = 0;
 
   @override
   void initState() {
     super.initState();
+    // Capturamos la referencia sincrónicamente para que el dispose use
+    // la MISMA instancia aunque el widget se desmonte antes del primer frame.
+    _notificationService = context.read<DataNotificationService>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _loadNotificationCount();
-      // Escuchar cambios en los datos
-      final notificationService =
-          Provider.of<DataNotificationService>(context, listen: false);
-      notificationService.addListener(_loadNotificationCount);
+      _notificationService.addListener(_loadNotificationCount);
     });
   }
 
   @override
   void dispose() {
-    // Remover listener para evitar memory leaks
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.removeListener(_loadNotificationCount);
+    // removeListener es idempotente: seguro aunque nunca se haya agregado.
+    _notificationService.removeListener(_loadNotificationCount);
     super.dispose();
   }
 

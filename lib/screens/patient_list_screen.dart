@@ -223,14 +223,14 @@ class _PatientListScreenState extends State<PatientListScreen> {
                                             trailing: PopupMenuButton<String>(
                                               onSelected: (value) async {
                                                 if (value == 'edit') {
+                                                  final router =
+                                                      GoRouter.of(context);
                                                   // Pequeño delay para asegurar que la UI esté lista
                                                   await Future.delayed(
                                                       const Duration(
                                                           milliseconds: 100));
-                                                  if (mounted) {
-                                                    context.go(
-                                                        '/patient/${patient.id}');
-                                                  }
+                                                  router.go(
+                                                      '/patient/${patient.id}');
                                                 } else if (value == 'delete') {
                                                   _deletePatient(patient);
                                                 }
@@ -265,14 +265,14 @@ class _PatientListScreenState extends State<PatientListScreen> {
                                               ],
                                             ),
                                             onTap: () async {
+                                              final router =
+                                                  GoRouter.of(context);
                                               // Pequeño delay para asegurar que la UI esté lista
                                               await Future.delayed(
                                                   const Duration(
                                                       milliseconds: 100));
-                                              if (mounted) {
-                                                context.go(
-                                                    '/patient/${patient.id}');
-                                              }
+                                              router.go(
+                                                  '/patient/${patient.id}');
                                             },
                                           ),
                                         );

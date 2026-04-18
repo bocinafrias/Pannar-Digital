@@ -12,6 +12,15 @@ La computadora destino debe tener:
 
 En tu computadora de desarrollo:
 
+> **⚠️ Importante:** Antes de compilar, debes crear un archivo `.env` en la raíz del proyecto con las credenciales de Supabase. Usa `.env.example` como plantilla:
+>
+> ```
+> SUPABASE_URL=https://tu-proyecto.supabase.co
+> SUPABASE_ANON_KEY=tu-anon-key-aqui
+> ```
+>
+> Este archivo está en `.gitignore` y nunca debe subirse al repositorio. Los scripts de compilación leen estas variables vía `--dart-define-from-file=.env`.
+
 > **💡 Nota:** Si tienes problemas ejecutando scripts de PowerShell, usa el archivo `COMPILAR.bat` haciendo doble clic sobre él, o ejecuta el comando con bypass (ver más abajo).
 
 ### Opción A: Usar el Script Automatizado (Recomendado)
@@ -39,7 +48,7 @@ powershell -ExecutionPolicy Bypass -File .\build_release.ps1
 ### Opción B: Compilación Manual
 
 ```powershell
-flutter build windows --release
+flutter build windows --release --dart-define-from-file=.env
 ```
 
 **Ubicación del ejecutable:**

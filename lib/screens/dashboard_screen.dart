@@ -11,6 +11,7 @@ import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/data_notification_service.dart';
 import '../services/appointment_notification_service.dart';
+import '../services/sync_service.dart';
 import '../models/appointment_model.dart';
 import '../models/user_model.dart';
 
@@ -23,6 +24,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final _db = DatabaseService();
+  late final DataNotificationService _notificationService;
   int _todayAppointments = 0;
   int _activePatients = 0;
   int _upcomingAppointments = 0;
@@ -33,20 +35,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _loadDashboardData();
-    // Escuchar cambios en los datos
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.addListener(_loadDashboardData);
+    _syncFromSupabase();
+    // Precargar usuarios en caché para resolución de nombres
+    context.read<AuthService>().getUsers();
+    // Escuchar cambios en los datos. Guardamos la referencia para que el
+    // dispose use la MISMA instancia (no depende de buscarla otra vez).
+    _notificationService = context.read<DataNotificationService>();
+    _notificationService.addListener(_loadDashboardData);
     // RF-10: Lanzar notificaciones de citas del día al entrar al dashboard
     WidgetsBinding.instance.addPostFrameCallback((_) => _startNotifications());
   }
 
   @override
   void dispose() {
-    // Remover listener para evitar memory leaks
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.removeListener(_loadDashboardData);
+    _notificationService.removeListener(_loadDashboardData);
     super.dispose();
   }
 
@@ -109,7 +111,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _reportsGenerated = reportsCount;
       });
     } catch (e) {
-      print('Error cargando datos del dashboard: $e');
+      debugPrint('Error cargando datos del dashboard: $e');
+    }
+  }
+
+  Future<void> _syncFromSupabase() async {
+    try {
+      final syncService = context.read<SyncService>();
+      await syncService.syncData();
+      if (mounted) _loadDashboardData();
+    } catch (e) {
+      debugPrint('Sync omitido: $e');
+      // Falta de conexión es esperado: la app funciona offline. No molestar.
+      // Otros errores (timeout, fallo de servidor, etc.) sí merecen aviso suave.
+      if (mounted && !e.toString().contains('No hay conexión')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'No se pudo sincronizar con la nube. Trabajando con datos locales.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 

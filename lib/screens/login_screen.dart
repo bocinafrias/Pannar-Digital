@@ -130,6 +130,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final hasSession = await _localAuth.hasLocalSession();
     final hasPinConfigured = await _localAuth.hasPinConfigured();
 
+    if (!mounted) return;
     setState(() {
       _isOfflineMode = !hasConnection;
       _hasLocalSession = hasSession;
@@ -242,6 +243,7 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
+      if (!mounted) return;
       final authService = context.read<AuthService>();
       final user = await authService.signInOffline(pin: pin);
 
@@ -293,22 +295,23 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        // Limpiar estado de sesión local si hay error
-        final hasSession = await _localAuth.hasLocalSession();
-        if (!hasSession) {
-          setState(() {
-            _hasLocalSession = false;
-            _hasPin = false;
-          });
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
-        );
       }
+      // Limpiar estado de sesión local si hay error
+      final hasSession = await _localAuth.hasLocalSession();
+      if (!mounted) return;
+      if (!hasSession) {
+        setState(() {
+          _hasLocalSession = false;
+          _hasPin = false;
+        });
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
     }
   }
 
@@ -544,7 +547,7 @@ class _LoginScreenState extends State<LoginScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           // Símbolo: cuadrícula 2x2 con cuadrados blancos sobre fondo azul
-          Container(
+          SizedBox(
             width: 48,
             height: 48,
             child: GridView.count(
@@ -593,7 +596,7 @@ class _LoginScreenState extends State<LoginScreen> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),

@@ -29,7 +29,6 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
 
   // Community autocomplete
   final _communityController = TextEditingController();
-  String? _selectedCommunity;
 
   DateTime? _dateOfBirth;
   String? _selectedGender;
@@ -73,11 +72,8 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
         _emailController.text = patient.email ?? '';
         _phoneController.text = patient.phone ?? '';
         _addressController.text = patient.address ?? '';
-        // Comunidad: intentar mapear el valor guardado al catálogo
-        final savedAddress = patient.address ?? '';
-        final match = findCommunity(savedAddress);
-        _selectedCommunity = match != null ? savedAddress : null;
-        _communityController.text = savedAddress;
+        // Comunidad: cargar el valor guardado en el controlador del autocomplete.
+        _communityController.text = patient.address ?? '';
         _dateOfBirth = patient.dateOfBirth;
         _selectedGender = patient.gender;
         _originalCreatedAt = patient.createdAt;
@@ -168,6 +164,7 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
           return;
         }
       }
+      if (!mounted) return;
       final authService = context.read<AuthService>();
       final currentUserId = authService.currentUser?.id ?? '';
 
@@ -186,8 +183,9 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
         name: _nameController.text,
         email: _emailController.text.isEmpty ? null : _emailController.text,
         phone: _phoneController.text.isEmpty ? null : _phoneController.text,
-        address:
-            _communityController.text.isEmpty ? null : _communityController.text,
+        address: _communityController.text.isEmpty
+            ? null
+            : _communityController.text,
         dateOfBirth: _dateOfBirth,
         gender: _selectedGender,
         psychologistId: psychologistId,
@@ -286,11 +284,11 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
 
     // Mostrar loading solo si estamos editando y aún cargando
     if (_isLoading && _isEditing && _nameController.text.isEmpty) {
-      return Scaffold(
+      return const Scaffold(
         body: Row(
           children: [
-            const Sidebar(),
-            const Expanded(
+            Sidebar(),
+            Expanded(
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -359,6 +357,18 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
                                 border: OutlineInputBorder(),
                               ),
                               keyboardType: TextInputType.emailAddress,
+                              validator: (value) {
+                                // Campo opcional: vacío es válido.
+                                if (value == null || value.trim().isEmpty) {
+                                  return null;
+                                }
+                                final emailRegex = RegExp(
+                                    r'^[\w.+-]+@[\w-]+\.[\w.-]+$');
+                                if (!emailRegex.hasMatch(value.trim())) {
+                                  return 'Correo electrónico inválido';
+                                }
+                                return null;
+                              },
                             ),
                             const SizedBox(height: 16),
                             TextFormField(
@@ -372,6 +382,16 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
                               inputFormatters: [
                                 FilteringTextInputFormatter.digitsOnly,
                               ],
+                              validator: (value) {
+                                // Campo opcional: vacío es válido.
+                                if (value == null || value.isEmpty) {
+                                  return null;
+                                }
+                                if (value.length != 10) {
+                                  return 'El teléfono debe tener 10 dígitos';
+                                }
+                                return null;
+                              },
                             ),
                             const SizedBox(height: 16),
                             ListTile(
@@ -386,7 +406,7 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
                             ),
                             const SizedBox(height: 8),
                             DropdownButtonFormField<String>(
-                              value: _selectedGender,
+                              initialValue: _selectedGender,
                               decoration: const InputDecoration(
                                 labelText: 'Género',
                                 border: OutlineInputBorder(),
@@ -407,9 +427,6 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
                             // ── Comunidad / Colonia ───────────────────────
                             _CommunityAutocomplete(
                               controller: _communityController,
-                              onSelected: (value) {
-                                setState(() => _selectedCommunity = value);
-                              },
                             ),
                             const SizedBox(height: 24),
                             SizedBox(
@@ -472,11 +489,9 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
 
 class _CommunityAutocomplete extends StatefulWidget {
   final TextEditingController controller;
-  final ValueChanged<String> onSelected;
 
   const _CommunityAutocomplete({
     required this.controller,
-    required this.onSelected,
   });
 
   @override
@@ -548,9 +563,8 @@ class _CommunityAutocompleteState extends State<_CommunityAutocomplete> {
                                 ? Icons.location_on
                                 : Icons.location_on_outlined,
                             size: 16,
-                            color: isJalpa
-                                ? const Color(0xFF1E3A5F)
-                                : Colors.grey,
+                            color:
+                                isJalpa ? const Color(0xFF1E3A5F) : Colors.grey,
                           ),
                           const SizedBox(width: 10),
                           Expanded(
@@ -590,7 +604,6 @@ class _CommunityAutocompleteState extends State<_CommunityAutocomplete> {
       },
       onSelected: (CommunityEntry entry) {
         widget.controller.text = entry.displayName;
-        widget.onSelected(entry.displayName);
       },
       fieldViewBuilder:
           (context, textEditingController, focusNode, onFieldSubmitted) {

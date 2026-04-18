@@ -43,8 +43,11 @@ class AppointmentModel {
         orElse: () => AppointmentStatus.scheduled,
       ),
       notes: json['notes'] as String?,
-      attended:
-          json['attended'] == null ? null : (json['attended'] as int) == 1,
+      attended: json['attended'] == null
+          ? null
+          : json['attended'] is bool
+              ? json['attended'] as bool
+              : (json['attended'] as int) == 1,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: json['updated_at'] != null
           ? DateTime.parse(json['updated_at'] as String)

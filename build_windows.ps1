@@ -26,13 +26,13 @@ if (Test-Path "build") {
 
 # Compilar primero
 Write-Host "Compilando aplicación..." -ForegroundColor Green
-flutter build windows --debug
+flutter build windows --debug --dart-define-from-file=.env
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Compilación exitosa. Ejecutando aplicación..." -ForegroundColor Green
     Start-Process -FilePath "build\windows\x64\runner\Debug\pannar_digital.exe"
 } else {
     Write-Host "Error en la compilación. Intentando flutter run..." -ForegroundColor Yellow
-    flutter run -d windows
+    flutter run -d windows --dart-define-from-file=.env
 }
 

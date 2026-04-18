@@ -17,11 +17,11 @@ if (Test-Path ".dart_tool\hooks_runner") {
 Write-Host "Compilando con hooks deshabilitados..." -ForegroundColor Green
 
 # Intentar compilar directamente sin pasar por pub get
-flutter build windows --debug --no-pub
+flutter build windows --debug --no-pub --dart-define-from-file=.env
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Falló con --no-pub, intentando normal..." -ForegroundColor Yellow
-    flutter build windows --debug
+    flutter build windows --debug --dart-define-from-file=.env
 }
 
 if ($LASTEXITCODE -eq 0) {

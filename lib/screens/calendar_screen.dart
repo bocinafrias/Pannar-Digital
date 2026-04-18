@@ -27,45 +27,44 @@ class _CalendarScreenState extends State<CalendarScreen> {
   List<AppointmentModel> _appointments = [];
   List<UserModel> _psychologists = [];
   Map<String, String> _psychologistNames = {}; // id → nombre
+  late final DataNotificationService _notificationService;
 
   @override
   void initState() {
     super.initState();
     // Inicializar locale español
     initializeDateFormatting('es', null).then((_) {
-      setState(() {}); // Reconstruir después de cargar locale
+      if (mounted) setState(() {}); // Reconstruir después de cargar locale
     });
     _loadPsychologists();
     _loadAppointments();
-    // Escuchar cambios en los datos
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.addListener(_loadAppointments);
+    // Guardamos la referencia para que el dispose use la MISMA instancia.
+    _notificationService = context.read<DataNotificationService>();
+    _notificationService.addListener(_loadAppointments);
   }
 
   @override
   void dispose() {
-    // Remover listener para evitar memory leaks
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.removeListener(_loadAppointments);
+    _notificationService.removeListener(_loadAppointments);
     super.dispose();
   }
 
-  /// Carga la lista de psicólogos (solo relevante para el admin).
+  /// Carga la lista de psicólogos y construye el mapa id→nombre para todos los usuarios.
   Future<void> _loadPsychologists() async {
     final authService = context.read<AuthService>();
     final currentUser = authService.currentUserModel;
-    if (currentUser == null || currentUser.role != UserRole.admin) return;
 
     final users = await authService.getUsers();
-    final psychologists =
-        users.where((u) => u.role == UserRole.psychologist).toList();
     final nameMap = {for (final u in users) u.id: u.name};
 
     if (!mounted) return;
     setState(() {
-      _psychologists = psychologists;
+      // El dropdown de filtro solo es relevante para admins
+      if (currentUser?.role == UserRole.admin) {
+        _psychologists =
+            users.where((u) => u.role == UserRole.psychologist).toList();
+      }
+      // Siempre popular el mapa de nombres para resolución en diálogos
       _psychologistNames = nameMap;
     });
   }
@@ -103,6 +102,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       psychologistId: psychologistId,
       psychologistName: psychologistName,
     );
+    if (!mounted) return;
     setState(() => _appointments = appointments);
   }
 
@@ -458,8 +458,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void _showAppointmentDetails(
       BuildContext context, AppointmentModel appointment) async {
     final db = DatabaseService();
-    final patient = await db.getPatientById(appointment.patientId);
+    final authService = context.read<AuthService>();
+
+    // Cargar paciente y nombre de psicólogo en paralelo
+    final patientFuture = db.getPatientById(appointment.patientId);
+    final psychNameFuture = appointment.psychologistId.isNotEmpty
+        ? authService.getUserNameById(appointment.psychologistId)
+        : Future.value('');
+
+    final patient = await patientFuture;
+    final resolvedPsychName = await psychNameFuture;
     final isPast = appointment.dateTime.isBefore(DateTime.now());
+
+    if (!context.mounted) return;
 
     final dateFormat = DateFormat('EEEE, d \'de\' MMMM \'de\' y', 'es');
     final timeFormat = DateFormat('HH:mm', 'es');
@@ -509,7 +520,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 _DetailRow(
                   icon: Icons.person_outline,
                   label: 'Psicólogo responsable:',
-                  value: _getPsychologistName(appointment.psychologistId),
+                  value: resolvedPsychName.isNotEmpty
+                      ? resolvedPsychName
+                      : _getPsychologistName(appointment.psychologistId),
                 ),
               ],
               const SizedBox(height: 12),
@@ -567,12 +580,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
           ElevatedButton.icon(
             onPressed: () async {
+              // Capturamos router antes del await para no usar el
+              // BuildContext del diálogo después del async gap.
+              final router = GoRouter.of(context);
               Navigator.of(context).pop();
               // Cargar la cita completa y navegar al formulario de edición
               final fullAppointment =
                   await db.getAppointmentById(appointment.id);
-              if (fullAppointment != null && mounted) {
-                context.go(
+              if (fullAppointment != null) {
+                router.go(
                   '/appointment/new',
                   extra: fullAppointment,
                 );

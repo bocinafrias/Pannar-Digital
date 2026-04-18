@@ -22,6 +22,7 @@ class ReportsScreen extends StatefulWidget {
 class _ReportsScreenState extends State<ReportsScreen> {
   final _db = DatabaseService();
   final _pdfService = ReportPdfService();
+  late final DataNotificationService _notificationService;
   DateTime? _startDate;
   DateTime? _endDate;
   bool _isGenerating = false;
@@ -38,18 +39,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadReportData();
     });
-    // Escuchar cambios en los datos para actualizar el reporte
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.addListener(_loadReportData);
+    // Guardamos la referencia para que el dispose use la MISMA instancia.
+    _notificationService = context.read<DataNotificationService>();
+    _notificationService.addListener(_loadReportData);
   }
 
   @override
   void dispose() {
-    // Remover listener
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.removeListener(_loadReportData);
+    _notificationService.removeListener(_loadReportData);
     super.dispose();
   }
 
@@ -62,19 +59,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
         startDate: _startDate!,
         endDate: _endDate!,
       );
-      print('Report data loaded: $data'); // Debug
-      setState(() => _reportData = data);
+      debugPrint('Report data loaded: $data'); // Debug
+      if (mounted) setState(() => _reportData = data);
     } catch (e, stackTrace) {
-      print('Error loading report data: $e');
-      print('Stack trace: $stackTrace');
+      debugPrint('Error loading report data: $e');
+      debugPrint('Stack trace: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error al cargar datos: $e')),
         );
+        setState(() => _reportData = {});
       }
-      setState(() => _reportData = {});
     } finally {
-      setState(() => _isGenerating = false);
+      if (mounted) setState(() => _isGenerating = false);
     }
   }
 
@@ -148,12 +145,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
       );
 
       // Registrar el reporte generado en la base de datos local
-      final authService = context.read<AuthService>();
       await _db.insertReport(ReportModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         type: ReportType.monthly,
         title:
             'Reporte mensual — ${DateFormat('MMMM yyyy', 'es').format(_startDate!)}',
+        data: _reportData!,
         startDate: _startDate,
         endDate: _endDate,
         psychologistId: authService.currentUserModel?.id,
@@ -166,7 +163,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         );
       }
     } finally {
-      setState(() => _isGenerating = false);
+      if (mounted) setState(() => _isGenerating = false);
     }
   }
 
@@ -340,7 +337,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             .toList();
       }
     } catch (e) {
-      print('Error parsing talks: $e');
+      debugPrint('Error parsing talks: $e');
     }
 
     return SingleChildScrollView(
@@ -503,9 +500,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

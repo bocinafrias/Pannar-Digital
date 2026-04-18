@@ -43,3 +43,7 @@ app.*.map.json
 CREDENCIALES_CONFIGURACION.md
 *.key
 *.pem
+
+# Variables de entorno (contiene credenciales de Supabase)
+.env
+.env.local

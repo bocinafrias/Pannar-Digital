@@ -20,6 +20,7 @@ class WeeklySummarySection extends StatefulWidget {
 
 class _WeeklySummarySectionState extends State<WeeklySummarySection> {
   final _db = DatabaseService();
+  late final DataNotificationService _notificationService;
   Map<String, int> _genderStats = {
     'male': 0,
     'female': 0,
@@ -36,18 +37,14 @@ class _WeeklySummarySectionState extends State<WeeklySummarySection> {
   void initState() {
     super.initState();
     _loadStatistics();
-    // Escuchar cambios en los datos
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.addListener(_loadStatistics);
+    // Guardamos la referencia para que el dispose use la MISMA instancia.
+    _notificationService = context.read<DataNotificationService>();
+    _notificationService.addListener(_loadStatistics);
   }
 
   @override
   void dispose() {
-    // Remover listener para evitar memory leaks
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.removeListener(_loadStatistics);
+    _notificationService.removeListener(_loadStatistics);
     super.dispose();
   }
 
@@ -58,13 +55,13 @@ class _WeeklySummarySectionState extends State<WeeklySummarySection> {
         psychologistId: widget.psychologistId,
         psychologistName: widget.psychologistName,
       );
-
+      if (!mounted) return;
       setState(() {
         _genderStats = genderStats;
         _statusCounts = statusCounts;
       });
     } catch (e) {
-      // Error loading statistics, keep default values
+      debugPrint('Error cargando estadísticas: $e');
     }
   }
 
@@ -137,6 +134,7 @@ class _AppointmentsChart extends StatefulWidget {
 }
 
 class _AppointmentsChartState extends State<_AppointmentsChart> {
+  late final DataNotificationService _notificationService;
   Map<int, int> _weekdayCounts = {};
   bool _isLoading = true;
 
@@ -144,18 +142,14 @@ class _AppointmentsChartState extends State<_AppointmentsChart> {
   void initState() {
     super.initState();
     _loadData();
-    // Escuchar cambios en los datos
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.addListener(_loadData);
+    // Guardamos la referencia para que el dispose use la MISMA instancia.
+    _notificationService = context.read<DataNotificationService>();
+    _notificationService.addListener(_loadData);
   }
 
   @override
   void dispose() {
-    // Remover listener para evitar memory leaks
-    final notificationService =
-        Provider.of<DataNotificationService>(context, listen: false);
-    notificationService.removeListener(_loadData);
+    _notificationService.removeListener(_loadData);
     super.dispose();
   }
 
@@ -166,12 +160,13 @@ class _AppointmentsChartState extends State<_AppointmentsChart> {
         psychologistId: widget.psychologistId,
         psychologistName: widget.psychologistName,
       );
+      if (!mounted) return;
       setState(() {
         _weekdayCounts = counts;
         _isLoading = false;
       });
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
       debugPrint('Error cargando citas por día: $e');
     }
   }
@@ -371,7 +366,7 @@ class _GenderChart extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             spreadRadius: 1,
             blurRadius: 4,
             offset: const Offset(0, 2),
@@ -471,7 +466,7 @@ class _GenderBar extends StatelessWidget {
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
             value: percentage / 100,
-            backgroundColor: color.withOpacity(0.2),
+            backgroundColor: color.withValues(alpha: 0.2),
             valueColor: AlwaysStoppedAnimation<Color>(color),
             minHeight: 24,
           ),
@@ -502,7 +497,7 @@ class _AppointmentStatusList extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             spreadRadius: 1,
             blurRadius: 4,
             offset: const Offset(0, 2),

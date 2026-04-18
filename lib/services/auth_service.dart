@@ -24,22 +24,41 @@ class AuthService extends ChangeNotifier {
   bool _isBootstrapAdmin(String email) =>
       _bootstrapAdmins.contains(email.toLowerCase());
 
+  // Caché en memoria de usuarios para evitar consultas repetidas a Supabase
+  List<UserModel> _cachedUsers = [];
+
   // Obtener todos los usuarios (psicólogos y admin)
   Future<List<UserModel>> getUsers() async {
     try {
       final response = await _supabase.from('users').select().order('name');
 
       if (response.isEmpty) {
-        return [];
+        return _cachedUsers;
       }
 
-      return (response as List)
+      _cachedUsers = (response as List)
           .map((json) => UserModel.fromJson(json))
           .toList();
+      return _cachedUsers;
     } catch (e) {
       debugPrint('Error obteniendo usuarios: $e');
-      return [];
+      // Devolver caché si hay error de red
+      return _cachedUsers;
     }
+  }
+
+  // Buscar nombre de usuario por ID (usa caché o usuario actual)
+  Future<String> getUserNameById(String userId) async {
+    // Si es el usuario actual, devolver su nombre directamente
+    if (currentUserModel?.id == userId) {
+      return currentUserModel!.name;
+    }
+    // Buscar en caché primero
+    final cached = _cachedUsers.where((u) => u.id == userId).firstOrNull;
+    if (cached != null) return cached.name;
+    // Si no está en caché, intentar cargar usuarios
+    final users = await getUsers();
+    return users.where((u) => u.id == userId).firstOrNull?.name ?? userId;
   }
 
   // Obtener solo psicólogos
