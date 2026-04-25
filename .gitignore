@@ -47,3 +47,12 @@ CREDENCIALES_CONFIGURACION.md
 # Variables de entorno (contiene credenciales de Supabase)
 .env
 .env.local
+
+# Carpeta de trabajo de Claude Code (worktrees + builds locales)
+.claude/
+
+# Instaladores generados (no van en git, se publican como Releases)
+/dist/
+
+# Datos de prueba locales (pueden contener datos reales)
+/test_data/

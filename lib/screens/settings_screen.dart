@@ -597,7 +597,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 color: Color(0xFF1E3A5F),
               ),
               title: Text('PANNAR Digital'),
-              subtitle: Text('Versión 1.0.0'),
+              subtitle: Text('Versión 1.0.4'),
             ),
             ListTile(
               leading: Icon(

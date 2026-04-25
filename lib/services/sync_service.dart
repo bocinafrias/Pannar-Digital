@@ -141,32 +141,57 @@ class SyncService {
   // Descargar datos de Supabase a local
   Future<void> _downloadFromSupabase() async {
     try {
-      // Descargar pacientes
+      // Descargar pacientes (excluyendo soft-deleted en Supabase)
       // synced:true evita que los registros descargados queden como no-sincronizados
-      final patientsResponse =
-          await _supabase.from('patients').select().timeout(_networkTimeout);
+      final patientsResponse = await _supabase
+          .from('patients')
+          .select()
+          .filter('deleted_at', 'is', null)
+          .timeout(_networkTimeout);
       for (var patientData in patientsResponse) {
-        final patient = PatientModel.fromJson(patientData);
-        await _db.insertPatient(patient, synced: true);
+        try {
+          final patient = PatientModel.fromJson(patientData);
+          await _db.insertPatient(patient, synced: true);
+        } catch (e) {
+          debugPrint(
+              '⚠️ Saltando paciente con datos inválidos id=${patientData['id']}: $e');
+          debugPrint('   Fila: $patientData');
+        }
       }
 
-      // Descargar citas
+      // Descargar citas (excluyendo soft-deleted en Supabase)
       final appointmentsResponse = await _supabase
           .from('appointments')
           .select()
+          .filter('deleted_at', 'is', null)
           .timeout(_networkTimeout);
       for (var appointmentData in appointmentsResponse) {
-        final appointment = AppointmentModel.fromJson(appointmentData);
-        await _db.insertAppointment(appointment, synced: true);
+        try {
+          final appointment = AppointmentModel.fromJson(appointmentData);
+          await _db.insertAppointment(appointment, synced: true);
+        } catch (e) {
+          debugPrint(
+              '⚠️ Saltando cita con datos inválidos id=${appointmentData['id']}: $e');
+          debugPrint('   Fila: $appointmentData');
+        }
       }
 
       // Descargar pláticas
       try {
-        final talksResponse =
-            await _supabase.from('talks').select().timeout(_networkTimeout);
+        final talksResponse = await _supabase
+            .from('talks')
+            .select()
+            .filter('deleted_at', 'is', null)
+            .timeout(_networkTimeout);
         for (var talkData in talksResponse) {
-          final talk = TalkModel.fromJson(talkData);
-          await _db.insertTalk(talk, synced: true);
+          try {
+            final talk = TalkModel.fromJson(talkData);
+            await _db.insertTalk(talk, synced: true);
+          } catch (e) {
+            debugPrint(
+                '⚠️ Saltando plática con datos inválidos id=${talkData['id']}: $e');
+            debugPrint('   Fila: $talkData');
+          }
         }
       } catch (e) {
         // La tabla talks puede no existir aún en Supabase

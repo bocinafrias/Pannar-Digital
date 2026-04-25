@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/appointment_model.dart';
 import '../models/patient_model.dart';
 import '../models/report_model.dart';
@@ -24,7 +26,14 @@ class DatabaseService {
   }
 
   Future<Database> _initDatabase() async {
-    String path = join(await getDatabasesPath(), 'pannar_digital.db');
+    // Carpeta de soporte por usuario (escribible siempre, incluso si la app
+    // está instalada en C:\Program Files). En Windows resuelve a
+    // %APPDATA%\<package_name>\.
+    final supportDir = await getApplicationSupportDirectory();
+    if (!await supportDir.exists()) {
+      await supportDir.create(recursive: true);
+    }
+    final String path = join(supportDir.path, 'pannar_digital.db');
     final db = await openDatabase(
       path,
       version: 6, // v6: índices en deleted_at para acelerar queries con soft-delete
@@ -556,9 +565,12 @@ class DatabaseService {
   // Obtener datos no sincronizados
   Future<List<Map<String, dynamic>>> getUnsyncedData() async {
     final db = await database;
-    final patients = await db.query('patients', where: 'synced = 0');
-    final appointments = await db.query('appointments', where: 'synced = 0');
-    final talks = await db.query('talks', where: 'synced = 0');
+    final patients = await db.query('patients',
+        where: 'synced = 0 AND deleted_at IS NULL');
+    final appointments = await db.query('appointments',
+        where: 'synced = 0 AND deleted_at IS NULL');
+    final talks =
+        await db.query('talks', where: 'synced = 0 AND deleted_at IS NULL');
 
     return [
       {'table': 'patients', 'data': patients},

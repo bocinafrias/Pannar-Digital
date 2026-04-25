@@ -235,8 +235,7 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
                   onPressed: () {
                     Navigator.of(context).pop(); // Cerrar diálogo
                     if (mounted) {
-                      context.pop(); // Cerrar formulario
-                      // Redirigir a la lista de pacientes
+                      // context.go reemplaza el stack, no hace falta pop previo
                       context.go('/patients');
                     }
                   },
